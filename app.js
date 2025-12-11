@@ -9,6 +9,7 @@ class InternetMonitor {
         this.deviceId = this.generateDeviceId();
         this.isConnected = false;
         this.accessToken = null;
+        this.wakeLock = null; // Wake Lock для предотвращения засыпания
         this.settings = {
             serverUrl: 'wss://befiebubopal.beget.app/ws', // WebSocket сервер
             testFileSize: 50000, // 50KB
@@ -23,11 +24,24 @@ class InternetMonitor {
         this.checkAccess();
         this.registerServiceWorker();
         this.loadSettings();
+        this.setupBackgroundSync();
+
+        // Проверка PWA поддержки
+        this.checkPWASupport();
 
         // Автоподключение если есть токен
         if (this.accessToken) {
             this.connect();
         }
+
+        // Обработка видимости страницы
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                console.log('📱 Страница свернута');
+            } else {
+                console.log('📱 Страница активна');
+            }
+        });
     }
 
     setupUI() {
@@ -289,10 +303,17 @@ class InternetMonitor {
         console.log('✅ DOM elements OK, starting speed test');
         this.log('🚀 Запуск тестирования скорости...', 'info');
 
-        // Выполняем speed тест
-        await this.performSpeedTest();
+        // Запрашиваем Wake Lock для предотвращения засыпания
+        await this.requestWakeLock();
 
-        this.log('✅ Тестирование завершено', 'success');
+        try {
+            // Выполняем speed тест
+            await this.performSpeedTest();
+            this.log('✅ Тестирование завершено', 'success');
+        } finally {
+            // Освобождаем Wake Lock
+            await this.releaseWakeLock();
+        }
     }
 
     send(data) {
@@ -337,6 +358,71 @@ class InternetMonitor {
                     this.log(`❌ Service Worker ошибка: ${error}`, 'error');
                 });
         }
+    }
+}
+
+    // Wake Lock API для предотвращения засыпания экрана
+    async requestWakeLock() {
+        if ('wakeLock' in navigator) {
+            try {
+                this.wakeLock = await navigator.wakeLock.request('screen');
+                console.log('🔋 Wake Lock активирован');
+                this.wakeLock.addEventListener('release', () => {
+                    console.log('🔋 Wake Lock освобожден');
+                });
+            } catch (error) {
+                console.log('❌ Wake Lock не поддерживается или заблокирован:', error);
+            }
+        } else {
+            console.log('❌ Wake Lock API не поддерживается');
+        }
+    }
+
+    async releaseWakeLock() {
+        if (this.wakeLock) {
+            await this.wakeLock.release();
+            this.wakeLock = null;
+        }
+    }
+
+    // Background Sync для работы в фоне
+    setupBackgroundSync() {
+        if ('serviceWorker' in navigator && 'sync' in window.ServiceWorkerRegistration.prototype) {
+            navigator.serviceWorker.ready.then(registration => {
+                // Регистрируем periodic sync каждые 30 минут
+                if ('periodicSync' in registration) {
+                    registration.periodicSync.register('internet-test', {
+                        minInterval: 30 * 60 * 1000 // 30 минут
+                    }).then(() => {
+                        console.log('📅 Periodic background sync зарегистрирован');
+                    }).catch(error => {
+                        console.log('❌ Periodic sync не поддерживается:', error);
+                    });
+                }
+
+                // Регистрируем обычный background sync
+                registration.sync.register('internet-test').catch(error => {
+                    console.log('❌ Background sync не поддерживается:', error);
+                });
+            });
+        } else {
+            console.log('❌ Background Sync API не поддерживается');
+        }
+    }
+
+    // Проверка поддержки PWA функций
+    checkPWASupport() {
+        const features = {
+            serviceWorker: 'serviceWorker' in navigator,
+            backgroundSync: 'sync' in window.ServiceWorkerRegistration.prototype,
+            periodicSync: 'periodicSync' in window.ServiceWorkerRegistration.prototype,
+            wakeLock: 'wakeLock' in navigator,
+            notifications: 'Notification' in window,
+            push: 'PushManager' in window
+        };
+
+        console.log('🔍 PWA поддержка:', features);
+        return features;
     }
 }
 

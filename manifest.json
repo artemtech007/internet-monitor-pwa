@@ -4,11 +4,17 @@
   "description": "Мониторинг скорости интернета с WebSocket",
   "start_url": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "background_color": "#2563eb",
   "theme_color": "#2563eb",
   "orientation": "portrait",
   "categories": ["utilities", "productivity"],
   "lang": "ru",
+  "scope": "/",
+  "id": "internet-monitor-pwa",
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  },
   "icons": [
     {
       "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%232563eb'/><path d='M30 40 L50 20 L70 40 L70 70 L30 70 Z' fill='white'/><circle cx='50' cy='55' r='8' fill='%232563eb'/></svg>",
