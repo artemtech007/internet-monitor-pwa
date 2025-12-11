@@ -51,6 +51,8 @@ class InternetMonitor {
         // Обработка установки PWA
         window.addEventListener('beforeinstallprompt', (e) => {
             console.log('📱 PWA install prompt available');
+            console.log('📱 BeforeInstallPromptEvent:', e);
+            console.log('📱 Platforms:', e.platforms);
             e.preventDefault();
             this.deferredPrompt = e;
             this.showInstallButton();
@@ -90,6 +92,15 @@ class InternetMonitor {
         this.elements.connectBtn.addEventListener('click', () => this.connect());
         this.elements.testBtn.addEventListener('click', () => this.manualTest());
         this.elements.disconnectBtn.addEventListener('click', () => this.disconnect());
+
+        // Обработчик для кнопки установки PWA
+        if (this.elements.installBtn) {
+            this.elements.installBtn.addEventListener('click', (e) => {
+                console.log('📱 Install button clicked');
+                e.preventDefault();
+                this.installPWA();
+            });
+        }
 
         this.updateStatus('Ожидание подключения...', 'offline');
     }
@@ -473,7 +484,6 @@ class InternetMonitor {
             // Показываем кнопку всегда, если есть поддержка Service Worker
             if (pwaSupport.serviceWorker) {
                 this.elements.installBtn.style.display = 'block';
-                this.elements.installBtn.addEventListener('click', () => this.installPWA());
                 this.log('📱 Кнопка установки PWA доступна', 'info');
                 console.log('📱 Install button should now be visible');
             } else {
@@ -495,12 +505,16 @@ class InternetMonitor {
     // Установка PWA
     async installPWA() {
         console.log('📱 installPWA called, deferredPrompt:', !!this.deferredPrompt);
+        console.log('📱 deferredPrompt object:', this.deferredPrompt);
 
         if (this.deferredPrompt) {
             // Используем стандартный API
             console.log('📱 Using deferredPrompt for installation');
+            console.log('📱 Calling deferredPrompt.prompt()...');
             this.deferredPrompt.prompt();
+            console.log('📱 Prompt called, waiting for userChoice...');
             const { outcome } = await this.deferredPrompt.userChoice;
+            console.log('📱 User choice outcome:', outcome);
 
             if (outcome === 'accepted') {
                 console.log('✅ Пользователь принял установку PWA');
