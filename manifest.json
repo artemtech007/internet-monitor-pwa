@@ -2,7 +2,7 @@
   "name": "Internet Monitor Pro",
   "short_name": "NetMonitor",
   "description": "Мониторинг скорости интернета с WebSocket",
-  "start_url": "/",
+  "start_url": "/internet-monitor-pwa/",
   "display": "standalone",
   "background_color": "#2563eb",
   "theme_color": "#2563eb",
