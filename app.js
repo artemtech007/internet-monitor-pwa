@@ -576,11 +576,12 @@ class InternetMonitor {
                 instructions += '• Выберите "На экран Домой"\n';
                 instructions += '• Нажмите "Добавить"\n\n';
                 instructions += 'Или в Safari: меню → "Поделиться" → "На экран Домой"';
-            } else if (isAndroid) {
+            } else             if (isAndroid) {
                 if (isChrome) {
                     instructions += '• Нажмите "⋮" (меню) в правом верхнем углу\n';
                     instructions += '• Выберите "Добавить на главный экран"\n';
-                    instructions += '• Нажмите "Добавить" в диалоге';
+                    instructions += '• В появившемся диалоговом окне нажмите "Добавить"\n';
+                    instructions += '  (иногда может быть "Установить" или "Добавить на экран")';
                 } else if (isFirefox) {
                     instructions += '• Нажмите "⋮" (меню)\n';
                     instructions += '• Выберите "Установить это приложение"';
