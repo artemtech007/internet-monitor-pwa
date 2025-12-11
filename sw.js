@@ -64,36 +64,26 @@ self.addEventListener('activate', event => {
 
 // Обработка fetch запросов
 self.addEventListener('fetch', event => {
-    // Кэширование стратегия: Network First для динамического контента
-    if (event.request.url.includes('/api/') ||
-        event.request.url.includes('/ws') ||
-        event.request.url.includes('speed-test')) {
-        // Network First для API запросов
-        event.respondWith(
-            fetch(event.request)
-                .then(response => {
-                    // Кэшируем успешные ответы
-                    if (response.status === 200) {
-                        const responseClone = response.clone();
-                        caches.open(CACHE_NAME)
-                            .then(cache => cache.put(event.request, responseClone));
-                    }
-                    return response;
-                })
-                .catch(() => {
-                    // Fallback к кэшу при ошибке сети
-                    return caches.match(event.request);
-                })
-        );
-    } else {
-        // Cache First для статических файлов
-        event.respondWith(
-            caches.match(event.request)
-                .then(response => {
-                    return response || fetch(event.request);
-                })
-        );
+    const url = new URL(event.request.url);
+
+    // Полностью пропускаем API запросы и WebSocket
+    if (event.request.method !== 'GET' ||
+        url.pathname.includes('/api/') ||
+        url.pathname.includes('/ws') ||
+        url.pathname.includes('speed-test') ||
+        url.hostname !== location.hostname) {
+
+        // Для всех не-GET запросов и внешних запросов - просто проксируем
+        return;
     }
+
+    // Только для GET запросов к нашему домену и статических файлов
+    event.respondWith(
+        caches.match(event.request)
+            .then(response => {
+                return response || fetch(event.request);
+            })
+    );
 });
 
 // Обработка push уведомлений (для будущего использования)

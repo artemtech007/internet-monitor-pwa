@@ -62,6 +62,14 @@ class InternetMonitor {
             this.hideInstallButton();
             this.log('✅ PWA установлено!', 'success');
         });
+
+        // Fallback для мобильных устройств - показываем кнопку через 3 секунды
+        setTimeout(() => {
+            if (!this.deferredPrompt && this.checkPWASupport().serviceWorker) {
+                console.log('📱 Showing install button as fallback');
+                this.showInstallButton();
+            }
+        }, 3000);
     }
 
     setupUI() {
@@ -457,10 +465,16 @@ class InternetMonitor {
 
     // Показать кнопку установки PWA
     showInstallButton() {
-        if (this.elements.installBtn && this.deferredPrompt) {
-            this.elements.installBtn.style.display = 'block';
-            this.elements.installBtn.addEventListener('click', () => this.installPWA());
-            this.log('📱 Кнопка установки PWA доступна', 'info');
+        if (this.elements.installBtn) {
+            // Показываем кнопку если есть deferredPrompt ИЛИ это мобильное устройство
+            const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            const shouldShow = this.deferredPrompt || (isMobile && this.checkPWASupport().serviceWorker);
+
+            if (shouldShow) {
+                this.elements.installBtn.style.display = 'block';
+                this.elements.installBtn.addEventListener('click', () => this.installPWA());
+                this.log('📱 Кнопка установки PWA доступна', 'info');
+            }
         }
     }
 
