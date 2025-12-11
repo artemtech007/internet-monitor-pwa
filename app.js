@@ -10,7 +10,7 @@ class InternetMonitor {
         this.isConnected = false;
         this.accessToken = null;
         this.settings = {
-            serverUrl: 'wss://93.189.231.3:8081', // WebSocket сервер
+            serverUrl: 'ws://93.189.231.3:8081', // WebSocket сервер (временно без SSL)
             testFileSize: 50000, // 50KB
             reconnectInterval: 5000
         };
