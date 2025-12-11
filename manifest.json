@@ -1,0 +1,40 @@
+{
+  "name": "Internet Monitor Pro",
+  "short_name": "NetMonitor",
+  "description": "Мониторинг скорости интернета с WebSocket",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#2563eb",
+  "theme_color": "#2563eb",
+  "orientation": "portrait",
+  "categories": ["utilities", "productivity"],
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%232563eb'/><path d='M30 40 L50 20 L70 40 L70 70 L30 70 Z' fill='white'/><circle cx='50' cy='55' r='8' fill='%232563eb'/></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%232563eb'/><path d='M30 40 L50 20 L70 40 L70 70 L30 70 Z' fill='white'/><circle cx='50' cy='55' r='8' fill='%232563eb'/></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Тест скорости",
+      "short_name": "Тест",
+      "description": "Быстрый тест скорости интернета",
+      "url": "/?action=test",
+      "icons": [
+        {
+          "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%23f59e0b'/><text x='50' y='65' text-anchor='middle' fill='white' font-size='60'>⚡</text></svg>",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ]
+}

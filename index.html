@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌐 Internet Monitor</title>
+    <meta name="description" content="Мониторинг скорости интернета">
+    <meta name="theme-color" content="#2563eb">
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+
+    <!-- Icons -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%232563eb'/><path d='M30 40 L50 20 L70 40 L70 70 L30 70 Z' fill='white'/><circle cx='50' cy='55' r='8' fill='%232563eb'/></svg>">
+
+    <!-- Styles -->
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }
+
+        .status {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .status.online {
+            border-left: 4px solid #10b981;
+        }
+
+        .status.offline {
+            border-left: 4px solid #ef4444;
+        }
+
+        .status.testing {
+            border-left: 4px solid #f59e0b;
+        }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .metric {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .metric-label {
+            font-size: 0.8em;
+            opacity: 0.8;
+            margin-bottom: 5px;
+        }
+
+        .metric-value {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-top: 30px;
+        }
+
+        button {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            padding: 15px 20px;
+            border-radius: 10px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button.primary {
+            background: #10b981;
+        }
+
+        button.danger {
+            background: #ef4444;
+        }
+
+        .logs {
+            margin-top: 30px;
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        .log-entry {
+            font-size: 0.8em;
+            margin-bottom: 5px;
+            opacity: 0.8;
+        }
+
+        .log-entry.error {
+            color: #fca5a5;
+        }
+
+        .log-entry.success {
+            color: #86efac;
+        }
+
+        .log-entry.info {
+            color: #93c5fd;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 1.5em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌐 Internet Monitor</h1>
+
+        <div id="status" class="status">
+            <div>Ожидание подключения...</div>
+        </div>
+
+        <div class="metrics">
+            <div class="metric">
+                <div class="metric-label">Скорость</div>
+                <div class="metric-value" id="speed">--</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Задержка</div>
+                <div class="metric-value" id="ping">--</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="connectBtn" class="primary">🔌 Подключиться</button>
+            <button id="testBtn">⚡ Тест скорости</button>
+            <button id="disconnectBtn" class="danger">🔌 Отключиться</button>
+        </div>
+
+        <div class="logs">
+            <div id="logs" class="logs-content">
+                <!-- Logs will appear here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
