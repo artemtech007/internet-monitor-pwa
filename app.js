@@ -12,6 +12,12 @@ class InternetMonitor {
         this.wakeLock = null; // Wake Lock для предотвращения засыпания
         this.isTesting = false; // Флаг для предотвращения одновременных тестов
         this.deferredPrompt = null; // Для установки PWA
+
+        // Состояние жизненного цикла приложения
+        this.isReconnecting = false;
+        this.reconnectAttempts = 0;
+        this.reconnectTimeout = null;
+        this.pageVisible = !document.hidden;
         this.settings = {
             serverUrl: 'wss://befiebubopal.beget.app/ws', // WebSocket сервер
             testFileSize: 200000, // 200KB - увеличен для более точных измерений
@@ -39,13 +45,32 @@ class InternetMonitor {
             console.log('⚠️ No access token, waiting for manual connection');
         }
 
-        // Обработка видимости страницы
+        // Обработка жизненного цикла страницы (лучше чем visibilitychange для PWA)
+        document.addEventListener('pageshow', (event) => {
+            console.log('📱 Страница восстановлена (pageshow)', event.persisted ? '(из bfcache)' : '');
+            this.handlePageRestore();
+        });
+
+        document.addEventListener('pagehide', (event) => {
+            console.log('📱 Страница скрыта (pagehide)', event.persisted ? '(сохранится в bfcache)' : '');
+            this.handlePageHide();
+        });
+
+        // Дополнительная обработка видимости
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
-                console.log('📱 Страница свернута');
+                console.log('📱 Страница свернута (visibilitychange)');
+                this.handleVisibilityHidden();
             } else {
-                console.log('📱 Страница активна');
+                console.log('📱 Страница активна (visibilitychange)');
+                this.handleVisibilityVisible();
             }
+        });
+
+        // Обработка beforeunload для корректного завершения
+        window.addEventListener('beforeunload', () => {
+            console.log('📱 Страница закрывается (beforeunload)');
+            this.handlePageUnload();
         });
 
         // Обработка установки PWA
@@ -118,7 +143,8 @@ class InternetMonitor {
             testBtn: document.getElementById('testBtn'),
             disconnectBtn: document.getElementById('disconnectBtn'),
             installBtn: document.getElementById('installBtn'),
-            logs: document.getElementById('logs')
+            logs: document.getElementById('logs'),
+            loadingScreen: document.getElementById('loadingScreen')
         };
 
         console.log('🔍 DOM elements found:', {
@@ -142,6 +168,21 @@ class InternetMonitor {
         }
 
         this.updateStatus('Ожидание подключения...', 'offline');
+
+        // Скрыть loading screen после небольшой задержки
+        setTimeout(() => {
+            this.hideLoadingScreen();
+        }, 500);
+    }
+
+    // Скрытие loading screen
+    hideLoadingScreen() {
+        if (this.elements.loadingScreen) {
+            this.elements.loadingScreen.classList.add('hidden');
+            setTimeout(() => {
+                this.elements.loadingScreen.style.display = 'none';
+            }, 300); // Время анимации
+        }
     }
 
     checkAccess() {
@@ -201,6 +242,8 @@ class InternetMonitor {
             this.ws.onopen = () => {
                 console.log('✅ WebSocket opened successfully');
                 this.isConnected = true;
+                this.isReconnecting = false;
+                this.reconnectAttempts = 0; // Сброс счетчика при успешном подключении
                 this.updateStatus('✅ Подключено', 'online');
                 this.log('🔌 WebSocket подключён', 'success');
 
@@ -224,12 +267,15 @@ class InternetMonitor {
                 this.updateStatus('❌ Отключено', 'offline');
                 this.log('🔌 WebSocket отключён', 'error');
 
-                // Автопереподключение
-                setTimeout(() => {
-                    if (!this.isConnected) {
-                        this.connect();
-                    }
-                }, this.settings.reconnectInterval);
+                // Умное переподключение - только если страница видима и не нормальное закрытие
+                if (event.code !== 1000 && this.pageVisible) {
+                    console.log(`🔄 Переподключение через ${this.settings.reconnectInterval}ms...`);
+                    this.scheduleReconnect();
+                } else if (event.code === 1000) {
+                    console.log('✅ Нормальное отключение');
+                } else {
+                    console.log('📱 Страница свернута - пропускаем переподключение');
+                }
             };
 
             this.ws.onerror = (error) => {
@@ -244,11 +290,19 @@ class InternetMonitor {
     }
 
     disconnect() {
+        // Очистить таймауты переподключения
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+            this.reconnectTimeout = null;
+        }
+
         if (this.ws) {
-            this.ws.close();
+            this.ws.close(1000, 'Manual disconnect');
             this.ws = null;
         }
         this.isConnected = false;
+        this.isReconnecting = false;
+        this.reconnectAttempts = 0;
         this.updateStatus('Отключено', 'offline');
         this.log('🔌 Отключено вручную', 'info');
     }
@@ -552,6 +606,123 @@ class InternetMonitor {
     hideInstallButton() {
         if (this.elements.installBtn) {
             this.elements.installBtn.style.display = 'none';
+        }
+    }
+
+    // Обработка восстановления страницы
+    handlePageRestore() {
+        console.log('🔄 Восстановление страницы - проверка соединения...');
+
+        // Проверить WebSocket соединение
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            console.log('🔄 WebSocket не подключен, переподключаемся...');
+            this.attemptReconnect();
+        } else {
+            console.log('✅ WebSocket соединение активно');
+        }
+
+        // Скрыть loading screen при восстановлении
+        this.hideLoadingScreen();
+
+        // Восстановить UI состояние
+        this.updateStatus('Восстановлено', 'online');
+        this.log('📱 Приложение восстановлено', 'success');
+    }
+
+    // Обработка скрытия страницы
+    handlePageHide() {
+        console.log('💤 Страница скрыта - оптимизация ресурсов');
+
+        // Можно приостановить некоторые процессы, но не закрывать соединение
+        // WebSocket останется активным для background sync
+    }
+
+    // Обработка скрытия видимости
+    handleVisibilityHidden() {
+        console.log('👁️ Страница невидима - фоновый режим');
+        this.pageVisible = false;
+
+        // Приложение в фоне - можно приостановить некоторые активности
+        // WebSocket остается активным для получения команд от сервера
+    }
+
+    // Обработка восстановления видимости
+    handleVisibilityVisible() {
+        console.log('👁️ Страница видима - активный режим');
+        this.pageVisible = true;
+
+        // Проверить соединение при возвращении в foreground
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            console.log('🔄 Соединение потеряно при возвращении в foreground, восстанавливаем...');
+            this.reconnectAttempts = 0; // Сбросить счетчик попыток
+            this.attemptReconnect();
+        } else {
+            console.log('✅ Соединение активно при возвращении в foreground');
+        }
+    }
+
+    // Обработка закрытия страницы
+    handlePageUnload() {
+        console.log('🚪 Страница закрывается - корректное завершение');
+
+        // Очистить таймауты
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+            this.reconnectTimeout = null;
+        }
+
+        // Корректно закрыть соединения
+        if (this.ws) {
+            this.ws.close(1000, 'Page unloading');
+        }
+
+        // Освободить ресурсы
+        if (this.wakeLock) {
+            this.releaseWakeLock();
+        }
+    }
+
+    // Планирование переподключения с exponential backoff
+    scheduleReconnect() {
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+        }
+
+        const delay = Math.min(
+            this.settings.reconnectDelay * Math.pow(2, this.reconnectAttempts),
+            30000 // Максимум 30 секунд
+        );
+
+        console.log(`⏰ Переподключение запланировано через ${delay}ms (попытка ${this.reconnectAttempts + 1})`);
+
+        this.reconnectTimeout = setTimeout(() => {
+            this.attemptReconnect();
+        }, delay);
+    }
+
+    // Попытка переподключения с улучшенной логикой
+    attemptReconnect() {
+        if (this.isReconnecting) {
+            console.log('🔄 Переподключение уже выполняется');
+            return;
+        }
+
+        if (this.reconnectAttempts >= this.settings.maxReconnectAttempts) {
+            console.log('❌ Превышено максимальное количество попыток переподключения');
+            this.log('❌ Не удалось подключиться после нескольких попыток', 'error');
+            return;
+        }
+
+        this.isReconnecting = true;
+        this.reconnectAttempts++;
+
+        console.log(`🔄 Попытка переподключения ${this.reconnectAttempts}/${this.settings.maxReconnectAttempts}...`);
+
+        if (this.accessToken) {
+            this.connect();
+        } else {
+            console.log('⚠️ Нет токена для переподключения');
+            this.isReconnecting = false;
         }
     }
 
