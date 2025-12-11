@@ -67,11 +67,27 @@ class InternetMonitor {
                 if (isInstalled) {
                     this.hideInstallButton();
                     this.log('✅ PWA уже установлен', 'success');
+                    return;
                 }
             }).catch(error => {
                 console.log('📱 Error checking installed apps:', error);
             });
         }
+
+        // Дополнительная проверка - пробуем вызвать prompt вручную
+        setTimeout(() => {
+            if (!this.deferredPrompt) {
+                console.log('📱 No deferredPrompt found, checking alternative installation methods');
+
+                // Проверяем, есть ли window.install (некоторые браузеры)
+                if ('install' in window) {
+                    console.log('📱 window.install available');
+                    this.showInstallButton();
+                } else {
+                    console.log('📱 No alternative installation methods found');
+                }
+            }
+        }, 2000);
 
         // Обработка успешной установки
         window.addEventListener('appinstalled', () => {
@@ -483,12 +499,26 @@ class InternetMonitor {
     checkPWASupport() {
         const features = {
             serviceWorker: 'serviceWorker' in navigator,
-            backgroundSync: 'sync' in window.ServiceWorkerRegistration.prototype,
-            periodicSync: 'periodicSync' in window.ServiceWorkerRegistration.prototype,
+            backgroundSync: false, // Проверяем безопасно
+            periodicSync: false, // Проверяем безопасно
             wakeLock: 'wakeLock' in navigator,
             notifications: 'Notification' in window,
             push: 'PushManager' in window
         };
+
+        // Безопасная проверка ServiceWorkerRegistration
+        try {
+            if ('serviceWorker' in navigator && navigator.serviceWorker) {
+                navigator.serviceWorker.ready.then(registration => {
+                    features.backgroundSync = 'sync' in registration;
+                    features.periodicSync = 'periodicSync' in registration;
+                }).catch(() => {
+                    // Игнорируем ошибки
+                });
+            }
+        } catch (error) {
+            console.warn('⚠️ Error checking ServiceWorker features:', error);
+        }
 
         console.log('🔍 PWA поддержка:', features);
         return features;
@@ -578,19 +608,30 @@ class InternetMonitor {
                 instructions += 'Или в Safari: меню → "Поделиться" → "На экран Домой"';
             } else             if (isAndroid) {
                 if (isChrome) {
-                    instructions += '• Нажмите "⋮" (меню) в правом верхнем углу\n';
+                    instructions += '• Нажмите "⋮" (три точки) в правом верхнем углу\n';
                     instructions += '• Выберите "Добавить на главный экран"\n';
-                    instructions += '• В появившемся диалоговом окне нажмите "Добавить"\n';
-                    instructions += '  (иногда может быть "Установить" или "Добавить на экран")';
+                    instructions += '• В диалоговом окне нажмите "Добавить"\n';
+                    instructions += '• Готово! Иконка появится на рабочем столе';
                 } else if (isFirefox) {
-                    instructions += '• Нажмите "⋮" (меню)\n';
-                    instructions += '• Выберите "Установить это приложение"';
+                    instructions += '• Нажмите "⋮" (три точки)\n';
+                    instructions += '• Выберите "Установить это приложение"\n';
+                    instructions += '• Подтвердите установку';
                 } else if (isOpera) {
-                    instructions += '• Нажмите значок Opera в правом верхнем углу\n';
-                    instructions += '• Выберите "Добавить на главный экран"';
+                    instructions += '• Нажмите значок Opera (красный "O")\n';
+                    instructions += '• Выберите "Добавить на главный экран"\n';
+                    instructions += '• Или: ⋮ меню → "Добавить на главный экран"';
                 } else {
-                    instructions += '• Нажмите меню браузера (⋮)\n';
-                    instructions += '• Найдите "Добавить на главный экран" или "Установить"';
+                    // Samsung Internet, другие браузеры
+                    const isSamsung = /SamsungBrowser/.test(navigator.userAgent);
+                    if (isSamsung) {
+                        instructions += '• Нажмите ⋮ меню\n';
+                        instructions += '• Выберите "Добавить страницу на"\n';
+                        instructions += '• Выберите "Главный экран"';
+                    } else {
+                        instructions += '• Откройте меню браузера (⋮)\n';
+                        instructions += '• Найдите "Добавить на главный экран"\n';
+                        instructions += '• Или "Установить приложение"';
+                    }
                 }
             } else {
                 // Desktop browsers
