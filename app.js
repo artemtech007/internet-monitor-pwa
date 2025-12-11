@@ -202,9 +202,9 @@ class InternetMonitor {
         const startTime = performance.now();
 
         try {
-            // Пинг через fetch к надежному ресурсу
-            const response = await fetch('https://www.google.com/favicon.ico', {
-                method: 'HEAD',
+            // Пинг через fetch к нашему серверу
+            const response = await fetch('https://befiebubopal.beget.app/api/devices', {
+                method: 'GET',
                 cache: 'no-cache'
             });
 
