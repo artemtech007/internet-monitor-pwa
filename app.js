@@ -511,10 +511,17 @@ class InternetMonitor {
             // Используем стандартный API
             console.log('📱 Using deferredPrompt for installation');
             console.log('📱 Calling deferredPrompt.prompt()...');
-            this.deferredPrompt.prompt();
-            console.log('📱 Prompt called, waiting for userChoice...');
-            const { outcome } = await this.deferredPrompt.userChoice;
-            console.log('📱 User choice outcome:', outcome);
+            try {
+                const result = this.deferredPrompt.prompt();
+                console.log('📱 Prompt result:', result);
+                console.log('📱 Prompt called, waiting for userChoice...');
+                const { outcome } = await this.deferredPrompt.userChoice;
+                console.log('📱 User choice outcome:', outcome);
+            } catch (error) {
+                console.error('❌ Error calling prompt():', error);
+                this.log('❌ Ошибка при показе диалога установки', 'error');
+                return;
+            }
 
             if (outcome === 'accepted') {
                 console.log('✅ Пользователь принял установку PWA');
