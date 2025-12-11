@@ -228,15 +228,60 @@ class InternetMonitor {
 
         } catch (error) {
             console.log('❌ Ping test failed with error:', error.message);
-            console.log('❌ Setting ping element to "Ошибка"');
-            this.elements.ping.textContent = 'Ошибка';
-            this.send({
-                type: 'ping_result',
-                success: false,
-                error: error.message,
-                timestamp: Date.now()
-            });
-            this.log(`❌ Ping ошибка: ${error.message}`, 'error');
+
+            // Попробуем альтернативный метод - WebSocket ping
+            try {
+                console.log('🔄 Trying WebSocket ping as fallback...');
+                const wsStart = performance.now();
+                const testWs = new WebSocket(this.settings.serverUrl);
+
+                testWs.onopen = () => {
+                    const wsPing = Math.round(performance.now() - wsStart);
+                    console.log('🔄 WebSocket ping successful:', wsPing, 'ms');
+                    this.elements.ping.textContent = `${wsPing}ms`;
+                    this.send({
+                        type: 'ping_result',
+                        ping: wsPing,
+                        success: true,
+                        method: 'websocket',
+                        timestamp: Date.now()
+                    });
+                    this.log(`🏓 Ping (WS): ${wsPing}ms`, 'success');
+                    testWs.close();
+                };
+
+                testWs.onerror = () => {
+                    console.log('❌ WebSocket ping also failed');
+                    console.log('❌ Setting ping element to "Ошибка"');
+                    this.elements.ping.textContent = 'Ошибка';
+                    this.send({
+                        type: 'ping_result',
+                        success: false,
+                        error: error.message,
+                        timestamp: Date.now()
+                    });
+                    this.log(`❌ Ping ошибка: ${error.message}`, 'error');
+                };
+
+                // Таймаут для WebSocket
+                setTimeout(() => {
+                    if (testWs.readyState === WebSocket.CONNECTING) {
+                        testWs.close();
+                    }
+                }, 3000);
+
+            } catch (wsError) {
+                console.log('❌ WebSocket fallback also failed');
+                console.log('❌ Setting ping element to "Ошибка"');
+                this.elements.ping.textContent = 'Ошибка';
+                this.send({
+                    type: 'ping_result',
+                    success: false,
+                    error: error.message,
+                    timestamp: Date.now()
+                });
+                this.log(`❌ Ping ошибка: ${error.message}`, 'error');
+            }
         }
     }
 
