@@ -1,4 +1,3 @@
-// Updated: $(date)
 /**
  * Internet Monitor PWA
  * WebSocket-based internet speed monitoring
