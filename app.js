@@ -11,6 +11,7 @@ class InternetMonitor {
         this.accessToken = null;
         this.wakeLock = null; // Wake Lock для предотвращения засыпания
         this.isTesting = false; // Флаг для предотвращения одновременных тестов
+        this.deferredPrompt = null; // Для установки PWA
         this.settings = {
             serverUrl: 'wss://befiebubopal.beget.app/ws', // WebSocket сервер
             testFileSize: 200000, // 200KB - увеличен для более точных измерений
@@ -24,7 +25,6 @@ class InternetMonitor {
         this.setupUI();
         this.checkAccess();
         this.registerServiceWorker();
-        this.loadSettings();
         this.setupBackgroundSync();
 
         // Проверка PWA поддержки
@@ -47,6 +47,21 @@ class InternetMonitor {
                 console.log('📱 Страница активна');
             }
         });
+
+        // Обработка установки PWA
+        window.addEventListener('beforeinstallprompt', (e) => {
+            console.log('📱 PWA install prompt available');
+            e.preventDefault();
+            this.deferredPrompt = e;
+            this.showInstallButton();
+        });
+
+        // Обработка успешной установки
+        window.addEventListener('appinstalled', () => {
+            console.log('✅ PWA installed successfully');
+            this.hideInstallButton();
+            this.log('✅ PWA установлено!', 'success');
+        });
     }
 
     setupUI() {
@@ -56,6 +71,7 @@ class InternetMonitor {
             connectBtn: document.getElementById('connectBtn'),
             testBtn: document.getElementById('testBtn'),
             disconnectBtn: document.getElementById('disconnectBtn'),
+            installBtn: document.getElementById('installBtn'),
             logs: document.getElementById('logs')
         };
 
@@ -112,19 +128,6 @@ class InternetMonitor {
         return 'device_' + Math.abs(hash).toString(16).substring(0, 8);
     }
 
-    async loadSettings() {
-        try {
-            // Загрузка настроек с сервера
-            const response = await fetch(`https://your-api.com/settings?device=${this.deviceId}&token=${this.accessToken}`);
-            if (response.ok) {
-                const serverSettings = await response.json();
-                this.settings = { ...this.settings, ...serverSettings };
-                this.log('✅ Настройки загружены с сервера', 'success');
-            }
-        } catch (error) {
-            this.log('⚠️ Используются настройки по умолчанию', 'info');
-        }
-    }
 
     connect() {
         console.log('🔌 Attempting to connect to:', this.settings.serverUrl);
@@ -450,6 +453,44 @@ class InternetMonitor {
 
         console.log('🔍 PWA поддержка:', features);
         return features;
+    }
+
+    // Показать кнопку установки PWA
+    showInstallButton() {
+        if (this.elements.installBtn && this.deferredPrompt) {
+            this.elements.installBtn.style.display = 'block';
+            this.elements.installBtn.addEventListener('click', () => this.installPWA());
+            this.log('📱 Кнопка установки PWA доступна', 'info');
+        }
+    }
+
+    // Скрыть кнопку установки PWA
+    hideInstallButton() {
+        if (this.elements.installBtn) {
+            this.elements.installBtn.style.display = 'none';
+        }
+    }
+
+    // Установка PWA
+    async installPWA() {
+        if (!this.deferredPrompt) {
+            this.log('❌ PWA установка недоступна', 'error');
+            return;
+        }
+
+        this.deferredPrompt.prompt();
+        const { outcome } = await this.deferredPrompt.userChoice;
+
+        if (outcome === 'accepted') {
+            console.log('✅ Пользователь принял установку PWA');
+            this.log('✅ Установка PWA принята', 'success');
+        } else {
+            console.log('❌ Пользователь отклонил установку PWA');
+            this.log('❌ Установка PWA отклонена', 'info');
+        }
+
+        this.deferredPrompt = null;
+        this.hideInstallButton();
     }
 }
 
