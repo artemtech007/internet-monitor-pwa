@@ -63,13 +63,10 @@ class InternetMonitor {
             this.log('✅ PWA установлено!', 'success');
         });
 
-        // Fallback для мобильных устройств - показываем кнопку через 3 секунды
+        // Показываем кнопку установки сразу после инициализации
         setTimeout(() => {
-            if (!this.deferredPrompt && this.checkPWASupport().serviceWorker) {
-                console.log('📱 Showing install button as fallback');
-                this.showInstallButton();
-            }
-        }, 3000);
+            this.showInstallButton();
+        }, 1000);
     }
 
     setupUI() {
@@ -465,16 +462,26 @@ class InternetMonitor {
 
     // Показать кнопку установки PWA
     showInstallButton() {
-        if (this.elements.installBtn) {
-            // Показываем кнопку если есть deferredPrompt ИЛИ это мобильное устройство
-            const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            const shouldShow = this.deferredPrompt || (isMobile && this.checkPWASupport().serviceWorker);
+        console.log('📱 showInstallButton called');
+        console.log('📱 installBtn element:', this.elements.installBtn);
+        console.log('📱 deferredPrompt:', !!this.deferredPrompt);
 
-            if (shouldShow) {
+        if (this.elements.installBtn) {
+            const pwaSupport = this.checkPWASupport();
+            console.log('📱 PWA support check:', pwaSupport);
+
+            // Показываем кнопку всегда, если есть поддержка Service Worker
+            if (pwaSupport.serviceWorker) {
                 this.elements.installBtn.style.display = 'block';
                 this.elements.installBtn.addEventListener('click', () => this.installPWA());
                 this.log('📱 Кнопка установки PWA доступна', 'info');
+                console.log('📱 Install button should now be visible');
+            } else {
+                console.log('📱 Service Worker not supported, hiding install button');
+                this.elements.installBtn.style.display = 'none';
             }
+        } else {
+            console.log('📱 Install button element not found!');
         }
     }
 
@@ -487,24 +494,41 @@ class InternetMonitor {
 
     // Установка PWA
     async installPWA() {
-        if (!this.deferredPrompt) {
-            this.log('❌ PWA установка недоступна', 'error');
-            return;
-        }
+        console.log('📱 installPWA called, deferredPrompt:', !!this.deferredPrompt);
 
-        this.deferredPrompt.prompt();
-        const { outcome } = await this.deferredPrompt.userChoice;
+        if (this.deferredPrompt) {
+            // Используем стандартный API
+            console.log('📱 Using deferredPrompt for installation');
+            this.deferredPrompt.prompt();
+            const { outcome } = await this.deferredPrompt.userChoice;
 
-        if (outcome === 'accepted') {
-            console.log('✅ Пользователь принял установку PWA');
-            this.log('✅ Установка PWA принята', 'success');
+            if (outcome === 'accepted') {
+                console.log('✅ Пользователь принял установку PWA');
+                this.log('✅ Установка PWA принята', 'success');
+            } else {
+                console.log('❌ Пользователь отклонил установку PWA');
+                this.log('❌ Установка PWA отклонена', 'info');
+            }
+
+            this.deferredPrompt = null;
+            this.hideInstallButton();
         } else {
-            console.log('❌ Пользователь отклонил установку PWA');
-            this.log('❌ Установка PWA отклонена', 'info');
-        }
+            // Fallback - пытаемся показать инструкции
+            console.log('📱 No deferredPrompt, showing manual install instructions');
+            this.log('ℹ️ Для установки PWA используйте меню браузера', 'info');
 
-        this.deferredPrompt = null;
-        this.hideInstallButton();
+            // Показываем инструкции для разных браузеров
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            const isAndroid = /Android/.test(navigator.userAgent);
+
+            if (isIOS) {
+                alert('На iOS: нажмите "Поделиться" → "На экран Домой" → "Добавить"');
+            } else if (isAndroid) {
+                alert('На Android: нажмите "⋮" → "Добавить на главный экран"');
+            } else {
+                alert('В браузере найдите опцию "Установить приложение" или "Добавить на главный экран"');
+            }
+        }
     }
 }
 
