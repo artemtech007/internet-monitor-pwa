@@ -194,6 +194,10 @@ class InternetMonitor {
     }
 
     async performPingTest() {
+        console.log('🔍 Starting ping test...');
+        console.log('🔍 Ping element:', this.elements.ping);
+        console.log('🔍 Ping element exists:', !!this.elements.ping);
+
         this.updateStatus('🏓 Проверка ping...', 'testing');
         const startTime = performance.now();
 
@@ -207,8 +211,11 @@ class InternetMonitor {
             const endTime = performance.now();
             const ping = Math.round(endTime - startTime);
 
+            console.log('🔄 Calculated ping:', ping, 'ms');
+            console.log('🔄 Setting ping element textContent to:', `${ping}ms`);
             this.elements.ping.textContent = `${ping}ms`;
-            console.log('🔄 Ping element updated:', this.elements.ping.textContent);
+            console.log('🔄 Ping element updated to:', this.elements.ping.textContent);
+            console.log('🔄 Ping element actual text:', this.elements.ping.textContent);
 
             this.send({
                 type: 'ping_result',
@@ -220,6 +227,8 @@ class InternetMonitor {
             this.log(`🏓 Ping: ${ping}ms`, 'success');
 
         } catch (error) {
+            console.log('❌ Ping test failed with error:', error.message);
+            console.log('❌ Setting ping element to "Ошибка"');
             this.elements.ping.textContent = 'Ошибка';
             this.send({
                 type: 'ping_result',
@@ -232,6 +241,10 @@ class InternetMonitor {
     }
 
     async performSpeedTest(fileSize = this.settings.testFileSize) {
+        console.log('🔍 Starting speed test...');
+        console.log('🔍 Speed element:', this.elements.speed);
+        console.log('🔍 Speed element exists:', !!this.elements.speed);
+
         this.updateStatus('⚡ Тест скорости...', 'testing');
 
         try {
@@ -276,8 +289,11 @@ class InternetMonitor {
             // Расчет скорости
             const speedMbps = (bytesReceived * 8) / (duration / 1000) / 1_000_000;
 
+            console.log('🔄 Calculated speed:', speedMbps.toFixed(1), 'Mbps');
+            console.log('🔄 Setting speed element textContent to:', `${speedMbps.toFixed(1)} Mbps`);
             this.elements.speed.textContent = `${speedMbps.toFixed(1)} Mbps`;
-            console.log('🔄 Speed element updated:', this.elements.speed.textContent);
+            console.log('🔄 Speed element updated to:', this.elements.speed.textContent);
+            console.log('🔄 Speed element actual text:', this.elements.speed.textContent);
 
             this.send({
                 type: 'speed_result',
@@ -293,6 +309,8 @@ class InternetMonitor {
             this.log(`⚡ Скорость: ${speedMbps.toFixed(1)} Mbps`, 'success');
 
         } catch (error) {
+            console.log('❌ Speed test failed with error:', error.message);
+            console.log('❌ Setting speed element to "Ошибка"');
             this.elements.speed.textContent = 'Ошибка';
             this.send({
                 type: 'speed_result',
@@ -311,6 +329,17 @@ class InternetMonitor {
             return;
         }
 
+        // Проверка элементов DOM
+        if (!this.elements.speed || !this.elements.ping) {
+            console.error('❌ DOM elements not found:', {
+                speed: this.elements.speed,
+                ping: this.elements.ping
+            });
+            this.log('❌ Ошибка UI: элементы не найдены', 'error');
+            return;
+        }
+
+        console.log('✅ DOM elements OK, starting manual test');
         this.log('🚀 Запуск ручного тестирования...', 'info');
 
         // Выполняем ping тест
