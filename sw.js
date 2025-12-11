@@ -22,10 +22,22 @@ self.addEventListener('install', event => {
         caches.open(STATIC_CACHE)
             .then(cache => {
                 console.log('📦 Кэширование статических файлов');
-                return cache.addAll(STATIC_FILES);
+                // Кэшируем файлы по одному с обработкой ошибок
+                return Promise.allSettled(
+                    STATIC_FILES.map(url =>
+                        cache.add(url).catch(error => {
+                            console.warn(`⚠️ Не удалось закэшировать: ${url}`, error);
+                            return null; // Продолжаем без этого файла
+                        })
+                    )
+                );
             })
             .then(() => {
                 return self.skipWaiting();
+            })
+            .catch(error => {
+                console.warn('⚠️ Ошибка кэширования при установке:', error);
+                return self.skipWaiting(); // Продолжаем установку
             })
     );
 });

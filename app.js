@@ -10,9 +10,10 @@ class InternetMonitor {
         this.isConnected = false;
         this.accessToken = null;
         this.wakeLock = null; // Wake Lock для предотвращения засыпания
+        this.isTesting = false; // Флаг для предотвращения одновременных тестов
         this.settings = {
             serverUrl: 'wss://befiebubopal.beget.app/ws', // WebSocket сервер
-            testFileSize: 50000, // 50KB
+            testFileSize: 200000, // 200KB - увеличен для более точных измерений
             reconnectInterval: 5000
         };
 
@@ -223,6 +224,13 @@ class InternetMonitor {
         console.log('🔍 Speed element:', this.elements.speed);
         console.log('🔍 Speed element exists:', !!this.elements.speed);
 
+        // Предотвращаем одновременные тесты
+        if (this.isTesting) {
+            console.log('⚠️ Test already in progress, skipping');
+            return;
+        }
+        this.isTesting = true;
+
         this.updateStatus('⚡ Тест скорости...', 'testing');
 
         try {
@@ -234,14 +242,17 @@ class InternetMonitor {
 
             const startTime = performance.now();
 
-            // Отправка на сервер
-            const response = await fetch('https://befiebubopal.beget.app/speed-test', {
+            // Отправка на сервер с случайным параметром для предотвращения кэширования
+            const randomParam = Math.random().toString(36).substring(2);
+            const response = await fetch(`https://befiebubopal.beget.app/speed-test?_=${randomParam}`, {
                 method: 'POST',
                 body: testData,
                 headers: {
                     'Content-Type': 'application/octet-stream',
                     'X-Device-ID': this.deviceId,
-                    'X-Access-Token': this.accessToken
+                    'X-Access-Token': this.accessToken,
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
                 }
             });
 
@@ -298,6 +309,9 @@ class InternetMonitor {
             });
             this.updateStatus('❌ Ошибка теста', 'offline');
             this.log(`❌ Ошибка теста: ${error.message}`, 'error');
+        } finally {
+            // Сбрасываем флаг тестирования
+            this.isTesting = false;
         }
     }
 
