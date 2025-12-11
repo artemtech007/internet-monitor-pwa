@@ -41,6 +41,12 @@ class InternetMonitor {
             logs: document.getElementById('logs')
         };
 
+        console.log('🔍 DOM elements found:', {
+            speed: !!this.elements.speed,
+            ping: !!this.elements.ping,
+            status: !!this.elements.status
+        });
+
         // Event listeners
         this.elements.connectBtn.addEventListener('click', () => this.connect());
         this.elements.testBtn.addEventListener('click', () => this.manualTest());
@@ -202,6 +208,7 @@ class InternetMonitor {
             const ping = Math.round(endTime - startTime);
 
             this.elements.ping.textContent = `${ping}ms`;
+            console.log('🔄 Ping element updated:', this.elements.ping.textContent);
 
             this.send({
                 type: 'ping_result',
@@ -237,7 +244,7 @@ class InternetMonitor {
             const startTime = performance.now();
 
             // Отправка на сервер
-            const response = await fetch('https://your-server.com/speed-test', {
+            const response = await fetch('https://befiebubopal.beget.app/speed-test', {
                 method: 'POST',
                 body: testData,
                 headers: {
@@ -270,6 +277,7 @@ class InternetMonitor {
             const speedMbps = (bytesReceived * 8) / (duration / 1000) / 1_000_000;
 
             this.elements.speed.textContent = `${speedMbps.toFixed(1)} Mbps`;
+            console.log('🔄 Speed element updated:', this.elements.speed.textContent);
 
             this.send({
                 type: 'speed_result',
@@ -303,7 +311,18 @@ class InternetMonitor {
             return;
         }
 
+        this.log('🚀 Запуск ручного тестирования...', 'info');
+
+        // Выполняем ping тест
+        await this.performPingTest();
+
+        // Небольшая пауза между тестами
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Выполняем speed тест
         await this.performSpeedTest();
+
+        this.log('✅ Ручное тестирование завершено', 'success');
     }
 
     send(data) {
