@@ -34,7 +34,6 @@ class InternetMonitor {
         this.elements = {
             status: document.getElementById('status'),
             speed: document.getElementById('speed'),
-            ping: document.getElementById('ping'),
             connectBtn: document.getElementById('connectBtn'),
             testBtn: document.getElementById('testBtn'),
             disconnectBtn: document.getElementById('disconnectBtn'),
@@ -175,9 +174,6 @@ class InternetMonitor {
                 this.performSpeedTest(data.fileSize || this.settings.testFileSize);
                 break;
 
-            case 'ping_test_request':
-                this.performPingTest();
-                break;
 
             case 'settings_update':
                 this.settings = { ...this.settings, ...data.settings };
@@ -193,59 +189,6 @@ class InternetMonitor {
         }
     }
 
-    async performPingTest() {
-        console.log('🔍 Starting ping test...');
-        console.log('🔍 Connection status:', {
-            isConnected: this.isConnected,
-            wsExists: !!this.ws,
-            wsState: this.ws ? this.ws.readyState : 'no-ws',
-            wsOPEN: WebSocket.OPEN
-        });
-
-        this.updateStatus('🏓 Проверка сети...', 'testing');
-
-        // Всегда показываем результат - либо имитированный ping, либо статус
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            // WebSocket подключен - показываем имитированный ping
-            const simulatedPing = Math.floor(Math.random() * 100) + 20; // 20-120ms
-            console.log('🔄 WebSocket connected, simulated ping:', simulatedPing, 'ms');
-
-            this.elements.ping.textContent = `${simulatedPing}ms`;
-            this.send({
-                type: 'ping_result',
-                ping: simulatedPing,
-                success: true,
-                method: 'simulated',
-                timestamp: Date.now()
-            });
-            this.log(`🏓 Задержка: ${simulatedPing}ms`, 'success');
-        } else if (this.isConnected) {
-            // isConnected = true, но WS не OPEN
-            const simulatedPing = Math.floor(Math.random() * 50) + 50; // 50-100ms
-            console.log('🔄 Connection flagged as connected, simulated ping:', simulatedPing, 'ms');
-
-            this.elements.ping.textContent = `${simulatedPing}ms`;
-            this.send({
-                type: 'ping_result',
-                ping: simulatedPing,
-                success: true,
-                method: 'connected-flag',
-                timestamp: Date.now()
-            });
-            this.log(`🏓 Задержка: ${simulatedPing}ms`, 'success');
-        } else {
-            // Нет подключения
-            console.log('❌ No connection detected');
-            this.elements.ping.textContent = 'Нет связи';
-            this.send({
-                type: 'ping_result',
-                success: false,
-                error: 'No connection',
-                timestamp: Date.now()
-            });
-            this.log('🏓 Нет подключения', 'error');
-        }
-    }
 
     async performSpeedTest(fileSize = this.settings.testFileSize) {
         console.log('🔍 Starting speed test...');
@@ -337,28 +280,19 @@ class InternetMonitor {
         }
 
         // Проверка элементов DOM
-        if (!this.elements.speed || !this.elements.ping) {
-            console.error('❌ DOM elements not found:', {
-                speed: this.elements.speed,
-                ping: this.elements.ping
-            });
-            this.log('❌ Ошибка UI: элементы не найдены', 'error');
+        if (!this.elements.speed) {
+            console.error('❌ Speed element not found:', this.elements.speed);
+            this.log('❌ Ошибка UI: элемент скорости не найден', 'error');
             return;
         }
 
-        console.log('✅ DOM elements OK, starting manual test');
-        this.log('🚀 Запуск ручного тестирования...', 'info');
-
-        // Выполняем ping тест
-        await this.performPingTest();
-
-        // Небольшая пауза между тестами
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        console.log('✅ DOM elements OK, starting speed test');
+        this.log('🚀 Запуск тестирования скорости...', 'info');
 
         // Выполняем speed тест
         await this.performSpeedTest();
 
-        this.log('✅ Ручное тестирование завершено', 'success');
+        this.log('✅ Тестирование завершено', 'success');
     }
 
     send(data) {
