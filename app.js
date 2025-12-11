@@ -58,6 +58,21 @@ class InternetMonitor {
             this.showInstallButton();
         });
 
+        // Проверяем, установлен ли уже PWA
+        if ('getInstalledRelatedApps' in navigator) {
+            navigator.getInstalledRelatedApps().then(apps => {
+                console.log('📱 Installed related apps:', apps);
+                const isInstalled = apps.some(app => app.id === 'internet-monitor-pwa');
+                console.log('📱 PWA already installed:', isInstalled);
+                if (isInstalled) {
+                    this.hideInstallButton();
+                    this.log('✅ PWA уже установлен', 'success');
+                }
+            }).catch(error => {
+                console.log('📱 Error checking installed apps:', error);
+            });
+        }
+
         // Обработка успешной установки
         window.addEventListener('appinstalled', () => {
             console.log('✅ PWA installed successfully');
@@ -69,6 +84,14 @@ class InternetMonitor {
         setTimeout(() => {
             this.showInstallButton();
         }, 1000);
+
+        // Повторная проверка через 5 секунд (на случай если Service Worker еще не зарегистрирован)
+        setTimeout(() => {
+            if (!this.deferredPrompt) {
+                console.log('📱 Retrying install button show after 5 seconds');
+                this.showInstallButton();
+            }
+        }, 5000);
     }
 
     setupUI() {
@@ -541,14 +564,56 @@ class InternetMonitor {
             // Показываем инструкции для разных браузеров
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
             const isAndroid = /Android/.test(navigator.userAgent);
+            const isChrome = /Chrome/.test(navigator.userAgent);
+            const isFirefox = /Firefox/.test(navigator.userAgent);
+            const isSafari = /Safari/.test(navigator.userAgent) && !isChrome;
+            const isOpera = /OPR|Opera/.test(navigator.userAgent);
+
+            let instructions = 'Для установки PWA:\n\n';
 
             if (isIOS) {
-                alert('На iOS: нажмите "Поделиться" → "На экран Домой" → "Добавить"');
+                instructions += '• Нажмите кнопку "Поделиться" (квадрат со стрелкой вверх)\n';
+                instructions += '• Выберите "На экран Домой"\n';
+                instructions += '• Нажмите "Добавить"\n\n';
+                instructions += 'Или в Safari: меню → "Поделиться" → "На экран Домой"';
             } else if (isAndroid) {
-                alert('На Android: нажмите "⋮" → "Добавить на главный экран"');
+                if (isChrome) {
+                    instructions += '• Нажмите "⋮" (меню) в правом верхнем углу\n';
+                    instructions += '• Выберите "Добавить на главный экран"\n';
+                    instructions += '• Нажмите "Добавить" в диалоге';
+                } else if (isFirefox) {
+                    instructions += '• Нажмите "⋮" (меню)\n';
+                    instructions += '• Выберите "Установить это приложение"';
+                } else if (isOpera) {
+                    instructions += '• Нажмите значок Opera в правом верхнем углу\n';
+                    instructions += '• Выберите "Добавить на главный экран"';
+                } else {
+                    instructions += '• Нажмите меню браузера (⋮)\n';
+                    instructions += '• Найдите "Добавить на главный экран" или "Установить"';
+                }
             } else {
-                alert('В браузере найдите опцию "Установить приложение" или "Добавить на главный экран"');
+                // Desktop browsers
+                if (isChrome) {
+                    instructions += '• Нажмите "⋮" (меню) в правом верхнем углу\n';
+                    instructions += '• Выберите "Установить Internet Monitor Pro"';
+                } else if (isFirefox) {
+                    instructions += '• Нажмите кнопку установки в адресной строке\n';
+                    instructions += '• Или: меню → "Приложения" → "Установить это приложение"';
+                } else if (isSafari) {
+                    instructions += '• Файл → "Поделиться" → "Добавить на Dock"\n';
+                    instructions += '• Или: Вид → "Настроить панель Touch Bar" (если применимо)';
+                } else if (isOpera) {
+                    instructions += '• Нажмите значок сердца в адресной строке\n';
+                    instructions += '• Или: меню → "Установить приложение"';
+                } else {
+                    instructions += '• Ищите кнопку "Установить" в адресной строке\n';
+                    instructions += '• Или в меню браузера: "Установить приложение"';
+                }
             }
+
+            instructions += '\n\n💡 Совет: Очистите кэш браузера и попробуйте в режиме инкогнито';
+
+            alert(instructions);
         }
     }
 }
