@@ -30,8 +30,12 @@ class InternetMonitor {
         this.checkPWASupport();
 
         // Автоподключение если есть токен
+        console.log('🔑 Access token on init:', !!this.accessToken, this.accessToken);
         if (this.accessToken) {
+            console.log('🚀 Auto-connecting with token...');
             this.connect();
+        } else {
+            console.log('⚠️ No access token, waiting for manual connection');
         }
 
         // Обработка видимости страницы
@@ -122,13 +126,21 @@ class InternetMonitor {
     }
 
     connect() {
-        if (this.isConnected) return;
+        console.log('🔌 Attempting to connect to:', this.settings.serverUrl);
+        console.log('🔑 Access token available:', !!this.accessToken);
+
+        if (this.isConnected) {
+            console.log('⚠️ Already connected, skipping');
+            return;
+        }
 
         try {
             this.updateStatus('Подключение...', 'testing');
             this.ws = new WebSocket(this.settings.serverUrl);
+            console.log('🌐 WebSocket instance created:', !!this.ws);
 
             this.ws.onopen = () => {
+                console.log('✅ WebSocket opened successfully');
                 this.isConnected = true;
                 this.updateStatus('✅ Подключено', 'online');
                 this.log('🔌 WebSocket подключён', 'success');
@@ -147,7 +159,8 @@ class InternetMonitor {
                 this.handleMessage(JSON.parse(event.data));
             };
 
-            this.ws.onclose = () => {
+            this.ws.onclose = (event) => {
+                console.log('🔌 WebSocket closed:', event.code, event.reason);
                 this.isConnected = false;
                 this.updateStatus('❌ Отключено', 'offline');
                 this.log('🔌 WebSocket отключён', 'error');
@@ -161,6 +174,7 @@ class InternetMonitor {
             };
 
             this.ws.onerror = (error) => {
+                console.log('❌ WebSocket error:', error);
                 this.log(`❌ WebSocket ошибка: ${error}`, 'error');
             };
 
