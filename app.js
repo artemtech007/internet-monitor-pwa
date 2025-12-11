@@ -10,7 +10,7 @@ class InternetMonitor {
         this.isConnected = false;
         this.accessToken = null;
         this.settings = {
-            serverUrl: 'wss://botstroikom.store/ws', // WebSocket сервер
+            serverUrl: 'wss://botstroikom.store:8443/ws', // WebSocket сервер
             testFileSize: 50000, // 50KB
             reconnectInterval: 5000
         };
