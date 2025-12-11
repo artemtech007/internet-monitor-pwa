@@ -373,7 +373,6 @@ class InternetMonitor {
                 });
         }
     }
-}
 
     // Wake Lock API для предотвращения засыпания экрана
     async requestWakeLock() {
