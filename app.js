@@ -674,6 +674,8 @@ class InternetMonitor {
         this.sendConnectionStatus('app_background', 'visibility_hidden');
 
         // Приложение в фоне - можно приостановить некоторые активности
+        // WebSocket остается активным для получения команд сервера
+    }
 
     // Обработка восстановления видимости
     handleVisibilityVisible() {
