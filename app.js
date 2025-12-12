@@ -21,7 +21,9 @@ class InternetMonitor {
         this.settings = {
             serverUrl: 'wss://befiebubopal.beget.app/ws', // WebSocket сервер
             testFileSize: 200000, // 200KB - увеличен для более точных измерений
-            reconnectInterval: 5000
+            reconnectInterval: 5000,
+            maxReconnectAttempts: 20, // Увеличено до 20 попыток
+            reconnectDelay: 30000 // Начальная задержка 30 секунд
         };
 
         this.init();
@@ -49,15 +51,20 @@ class InternetMonitor {
         document.addEventListener('pageshow', (event) => {
             console.log('📱 Страница восстановлена (pageshow)', event.persisted ? '(из bfcache)' : '');
             this.handlePageRestore();
+            // Отправить статус восстановления страницы
+            this.sendConnectionStatus('app_foreground', 'page_restored');
         });
 
         document.addEventListener('pagehide', (event) => {
             console.log('📱 Страница скрыта (pagehide)', event.persisted ? '(сохранится в bfcache)' : '');
             this.handlePageHide();
+            // Отправить статус сворачивания страницы
+            this.sendConnectionStatus('app_background', 'page_hidden');
         });
 
         // Дополнительная обработка видимости
         document.addEventListener('visibilitychange', () => {
+            console.log(`📱 Visibility change: hidden=${document.hidden}, pageVisible=${this.pageVisible}`);
             if (document.hidden) {
                 console.log('📱 Страница свернута (visibilitychange)');
                 this.handleVisibilityHidden();
@@ -260,6 +267,12 @@ class InternetMonitor {
                 // Отправляем статус восстановления соединения
                 this.sendConnectionStatus('connection_restored', 'websocket_reconnected');
 
+                // Очистить таймаут переподключения если он был
+                if (this.reconnectTimeout) {
+                    clearTimeout(this.reconnectTimeout);
+                    this.reconnectTimeout = null;
+                }
+
 
                 // Отправка информации об устройстве
                 this.send({
@@ -296,6 +309,8 @@ class InternetMonitor {
             this.ws.onerror = (error) => {
                 console.log('❌ WebSocket error:', error);
                 this.log(`❌ WebSocket ошибка: ${error}`, 'error');
+                // Отправить статус ошибки соединения
+                this.sendConnectionStatus('connection_lost', 'websocket_error');
             };
 
         } catch (error) {
@@ -305,6 +320,9 @@ class InternetMonitor {
     }
 
     disconnect() {
+        // Отправить статус отключения перед закрытием
+        this.sendConnectionStatus('connection_lost', 'manual_disconnect');
+
         // Очистить таймауты переподключения
         if (this.reconnectTimeout) {
             clearTimeout(this.reconnectTimeout);
@@ -719,18 +737,22 @@ class InternetMonitor {
         }
     }
 
-    // Планирование переподключения с exponential backoff
+    // Планирование переподключения с градацией
     scheduleReconnect() {
         if (this.reconnectTimeout) {
             clearTimeout(this.reconnectTimeout);
         }
 
-        const delay = Math.min(
-            this.settings.reconnectDelay * Math.pow(2, this.reconnectAttempts),
-            30000 // Максимум 30 секунд
-        );
+        let delay;
+        if (this.reconnectAttempts < 10) {
+            // Первые 10 попыток: каждые 30 секунд
+            delay = 30000;
+        } else {
+            // Следующие 10 попыток: каждые 30 минут
+            delay = 30 * 60 * 1000; // 30 минут
+        }
 
-        console.log(`⏰ Переподключение запланировано через ${delay}ms (попытка ${this.reconnectAttempts + 1})`);
+        console.log(`⏰ Переподключение запланировано через ${Math.round(delay/1000)} сек (попытка ${this.reconnectAttempts + 1}/${this.settings.maxReconnectAttempts})`);
 
         this.reconnectTimeout = setTimeout(() => {
             this.attemptReconnect();
