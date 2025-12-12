@@ -89,7 +89,8 @@ class InternetMonitor {
             console.log('🌐 Интернет соединение потеряно');
             this.isConnected = false;
             this.updateStatus('❌ Нет интернета', 'offline');
-            this.sendConnectionStatus('connection_lost', 'network_offline');
+            // Принудительно отправляем connection_lost
+            this.forceSendConnectionLost('network_offline');
         });
 
         // Обработка beforeunload для корректного завершения
@@ -113,7 +114,8 @@ class InternetMonitor {
                 console.log(`🔌 Обнаружена потеря соединения при периодической проверке (${heartbeatTimeout ? 'heartbeat timeout' : 'connection check'})`);
                 this.isConnected = false;
                 this.updateStatus('❌ Соединение потеряно', 'offline');
-                this.sendConnectionStatus('connection_lost', heartbeatTimeout ? 'heartbeat_timeout' : 'connection_check_failed');
+                // Отправляем connection_lost через HTTP с дополнительными попытками
+                this.forceSendConnectionLost(heartbeatTimeout ? 'heartbeat_timeout' : 'connection_check_failed');
                 this.log('🔌 Соединение потеряно (обнаружено проверкой)', 'error');
             }
 
@@ -333,8 +335,8 @@ class InternetMonitor {
                 // Сбрасываем флаг переподключения при разрыве
                 this.isReconnecting = false;
 
-                // Отправляем статус потери соединения
-                this.sendConnectionStatus('connection_lost', `websocket_closed_code_${event.code}`);
+                // Принудительно отправляем статус потери соединения
+                this.forceSendConnectionLost(`websocket_closed_code_${event.code}`);
 
                 // Переподключение при любом разрыве (кроме нормального закрытия)
                 if (event.code !== 1000) {
@@ -351,8 +353,8 @@ class InternetMonitor {
                 this.isConnected = false;
                 this.isReconnecting = false; // Сбрасываем флаг
                 this.updateStatus('❌ Ошибка соединения', 'offline');
-                // Отправить статус ошибки соединения
-                this.sendConnectionStatus('connection_lost', 'websocket_error');
+                // Принудительно отправить connection_lost
+                this.forceSendConnectionLost('websocket_error');
             };
 
         } catch (error) {
@@ -391,11 +393,13 @@ class InternetMonitor {
         switch (data.type) {
             case 'welcome':
                 console.log(`👋 Welcome received: ${data.message}, device: ${data.deviceId}, reconnect: ${data.isReconnect}`);
-                if (!data.isReconnect) {
-                    // Первичное подключение - отправляем connection_restored
-                    this.sendConnectionStatus('connection_restored', 'initial_connection');
+                if (data.isReconnect) {
+                    // Это переподключение - отправляем connection_restored
+                    this.sendConnectionStatus('connection_restored', 'reconnection_successful');
+                } else {
+                    // Первичное подключение - ничего не отправляем, connection_restored придет от сервера
+                    console.log('✅ Первичное подключение установлено');
                 }
-                // Для переподключения connection_restored уже отправлен в onopen
                 break;
             case 'speed_test_request':
                 this.performSpeedTest(data.fileSize || this.settings.testFileSize);
@@ -838,6 +842,56 @@ class InternetMonitor {
         }
     }
 
+    // Принудительная отправка connection_lost с повторными попытками
+    async forceSendConnectionLost(reason) {
+        console.log(`🚨 FORCE SEND CONNECTION_LOST: ${reason}`);
+        const maxAttempts = 3;
+        const delay = 1000; // 1 секунда между попытками
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                console.log(`🔄 Попытка ${attempt}/${maxAttempts} отправки connection_lost: ${reason}`);
+
+                const statusMessage = {
+                    type: 'connection_lost',
+                    deviceId: this.deviceId || 'unknown',
+                    token: this.accessToken || 'unknown',
+                    timestamp: Date.now(),
+                    reason: reason,
+                    userAgent: navigator.userAgent,
+                    url: window.location.href,
+                    attempt: attempt
+                };
+
+                const response = await fetch(`https://befiebubopal.beget.app/api/connection-status`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(statusMessage),
+                    // Таймаут 5 секунд
+                    signal: AbortSignal.timeout(5000)
+                });
+
+                if (response.ok) {
+                    console.log(`✅ connection_lost отправлен успешно на попытке ${attempt}`);
+                    return; // Успешно отправили, выходим
+                } else {
+                    console.log(`❌ Попытка ${attempt} - HTTP ${response.status}`);
+                }
+            } catch (error) {
+                console.log(`❌ Попытка ${attempt} - ошибка:`, error.message);
+            }
+
+            // Ждем перед следующей попыткой (кроме последней)
+            if (attempt < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+
+        console.log('❌ Все попытки отправки connection_lost провалились');
+    }
+
     // Отправка статуса соединения на сервер
     async sendConnectionStatus(type, reason = '') {
         if (!this.accessToken || !this.deviceId) {
@@ -857,24 +911,9 @@ class InternetMonitor {
 
         console.log('📡 Отправка статуса:', type, reason);
 
-        // Для connection_lost используем HTTP API, так как WebSocket может быть недоступен
+        // Для connection_lost используем принудительную отправку
         if (type === 'connection_lost') {
-            try {
-                const response = await fetch(`https://befiebubopal.beget.app/api/connection-status`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(statusMessage)
-                });
-                if (response.ok) {
-                    console.log('✅ connection_lost отправлен через HTTP');
-                } else {
-                    console.log('❌ Ошибка отправки connection_lost через HTTP');
-                }
-            } catch (error) {
-                console.log('❌ Ошибка сети при отправке connection_lost:', error);
-            }
+            await this.forceSendConnectionLost(reason);
         } else {
             // Для остальных статусов используем WebSocket
             this.send(statusMessage);
