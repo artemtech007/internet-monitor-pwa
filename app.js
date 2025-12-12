@@ -330,6 +330,9 @@ class InternetMonitor {
                 this.updateStatus('❌ Отключено', 'offline');
                 this.log('🔌 WebSocket отключён', 'error');
 
+                // Сбрасываем флаг переподключения при разрыве
+                this.isReconnecting = false;
+
                 // Отправляем статус потери соединения
                 this.sendConnectionStatus('connection_lost', `websocket_closed_code_${event.code}`);
 
@@ -346,6 +349,7 @@ class InternetMonitor {
                 console.log('❌ WebSocket error:', error);
                 this.log(`❌ WebSocket ошибка: ${error}`, 'error');
                 this.isConnected = false;
+                this.isReconnecting = false; // Сбрасываем флаг
                 this.updateStatus('❌ Ошибка соединения', 'offline');
                 // Отправить статус ошибки соединения
                 this.sendConnectionStatus('connection_lost', 'websocket_error');
@@ -354,6 +358,9 @@ class InternetMonitor {
         } catch (error) {
             this.log(`❌ Ошибка подключения: ${error.message}`, 'error');
             this.updateStatus('❌ Ошибка подключения', 'offline');
+        } finally {
+            // Всегда сбрасываем флаг переподключения
+            this.isReconnecting = false;
         }
     }
 
@@ -832,7 +839,7 @@ class InternetMonitor {
     }
 
     // Отправка статуса соединения на сервер
-    sendConnectionStatus(type, reason = '') {
+    async sendConnectionStatus(type, reason = '') {
         if (!this.accessToken || !this.deviceId) {
             console.log('⚠️ Нет данных для отправки статуса');
             return;
@@ -849,7 +856,29 @@ class InternetMonitor {
         };
 
         console.log('📡 Отправка статуса:', type, reason);
-        this.send(statusMessage);
+
+        // Для connection_lost используем HTTP API, так как WebSocket может быть недоступен
+        if (type === 'connection_lost') {
+            try {
+                const response = await fetch(`https://befiebubopal.beget.app/api/connection-status`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(statusMessage)
+                });
+                if (response.ok) {
+                    console.log('✅ connection_lost отправлен через HTTP');
+                } else {
+                    console.log('❌ Ошибка отправки connection_lost через HTTP');
+                }
+            } catch (error) {
+                console.log('❌ Ошибка сети при отправке connection_lost:', error);
+            }
+        } else {
+            // Для остальных статусов используем WebSocket
+            this.send(statusMessage);
+        }
     }
 
     // Установка PWA
