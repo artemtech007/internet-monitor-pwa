@@ -76,9 +76,11 @@ class InternetMonitor {
 
         // Периодическая проверка соединения каждые 30 секунд
         setInterval(() => {
-            if (this.pageVisible && (!this.ws || this.ws.readyState !== WebSocket.OPEN)) {
-                console.log('🔄 Периодическая проверка: соединение потеряно');
-                this.sendConnectionStatus('connection_lost', 'periodic_check_failed');
+            if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+                console.log(`🔄 Периодическая проверка: соединение потеряно (страница ${this.pageVisible ? 'видима' : 'свернута'})`);
+                if (!this.isReconnecting) {
+                    this.attemptReconnect();
+                }
             }
         }, 30 * 1000);
 
@@ -282,14 +284,12 @@ class InternetMonitor {
                 // Отправляем статус потери соединения
                 this.sendConnectionStatus('connection_lost', `websocket_closed_code_${event.code}`);
 
-                // Умное переподключение - только если страница видима и не нормальное закрытие
-                if (event.code !== 1000 && this.pageVisible) {
-                    console.log(`🔄 Переподключение через ${this.settings.reconnectInterval}ms...`);
+                // Переподключение при любом разрыве (кроме нормального закрытия)
+                if (event.code !== 1000) {
+                    console.log(`🔄 Переподключение через ${this.settings.reconnectInterval}ms (страница ${this.pageVisible ? 'видима' : 'свернута'})...`);
                     this.scheduleReconnect();
-                } else if (event.code === 1000) {
-                    console.log('✅ Нормальное отключение');
                 } else {
-                    console.log('📱 Страница свернута - пропускаем переподключение');
+                    console.log('✅ Нормальное отключение - переподключение не требуется');
                 }
             };
 
@@ -685,13 +685,16 @@ class InternetMonitor {
         this.sendConnectionStatus('app_foreground', 'visibility_visible');
 
 
-        // Проверить соединение при возвращении в foreground
+        // Всегда проверять соединение при возвращении в foreground
+        console.log('🔄 Проверка соединения при возвращении в foreground...');
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             console.log('🔄 Соединение потеряно при возвращении в foreground, восстанавливаем...');
             this.reconnectAttempts = 0; // Сбросить счетчик попыток
             this.attemptReconnect();
         } else {
             console.log('✅ Соединение активно при возвращении в foreground');
+            // Отправить статус что мы снова активны
+            this.sendConnectionStatus('app_foreground', 'visibility_restored');
         }
     }
 
