@@ -70,8 +70,17 @@ class InternetMonitor {
         // Обработка beforeunload для корректного завершения
         window.addEventListener('beforeunload', () => {
             console.log('📱 Страница закрывается (beforeunload)');
+            this.sendConnectionStatus('app_closed', 'page_unload');
             this.handlePageUnload();
         });
+
+        // Периодическая проверка соединения каждые 30 секунд
+        setInterval(() => {
+            if (this.pageVisible && (!this.ws || this.ws.readyState !== WebSocket.OPEN)) {
+                console.log('🔄 Периодическая проверка: соединение потеряно');
+                this.sendConnectionStatus('connection_lost', 'periodic_check_failed');
+            }
+        }, 30 * 1000);
 
         // Обработка установки PWA
         window.addEventListener('beforeinstallprompt', (e) => {
@@ -246,6 +255,9 @@ class InternetMonitor {
                 this.reconnectAttempts = 0; // Сброс счетчика при успешном подключении
                 this.updateStatus('✅ Подключено', 'online');
                 this.log('🔌 WebSocket подключён', 'success');
+                // Отправляем статус восстановления соединения
+                this.sendConnectionStatus('connection_restored', 'websocket_reconnected');
+
 
                 // Отправка информации об устройстве
                 this.send({
@@ -266,6 +278,9 @@ class InternetMonitor {
                 this.isConnected = false;
                 this.updateStatus('❌ Отключено', 'offline');
                 this.log('🔌 WebSocket отключён', 'error');
+
+                // Отправляем статус потери соединения
+                this.sendConnectionStatus('connection_lost', `websocket_closed_code_${event.code}`);
 
                 // Умное переподключение - только если страница видима и не нормальное закрытие
                 if (event.code !== 1000 && this.pageVisible) {
@@ -482,7 +497,20 @@ class InternetMonitor {
         this.elements.logs.appendChild(logEntry);
         this.elements.logs.scrollTop = this.elements.logs.scrollHeight;
 
-        // Ограничение количества логов
+        // Хранение логов в массиве с timestamp
+        if (!this.logs) this.logs = [];
+        this.logs.push({
+            message: message,
+            type: type,
+            timestamp: Date.now()
+        });
+
+        // Ограничение количества логов - последние 200 записей
+        if (this.logs.length > 200) {
+            this.logs = this.logs.slice(-200); // Оставляем последние 200
+        }
+
+        // Ограничение отображения в UI
         while (this.elements.logs.children.length > 50) {
             this.elements.logs.removeChild(this.elements.logs.firstChild);
         }
@@ -642,14 +670,18 @@ class InternetMonitor {
         console.log('👁️ Страница невидима - фоновый режим');
         this.pageVisible = false;
 
+        // Отправляем статус в фоне
+        this.sendConnectionStatus('app_background', 'visibility_hidden');
+
         // Приложение в фоне - можно приостановить некоторые активности
-        // WebSocket остается активным для получения команд от сервера
-    }
 
     // Обработка восстановления видимости
     handleVisibilityVisible() {
         console.log('👁️ Страница видима - активный режим');
         this.pageVisible = true;
+        // Отправляем статус восстановления
+        this.sendConnectionStatus('app_foreground', 'visibility_visible');
+
 
         // Проверить соединение при возвращении в foreground
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
@@ -724,6 +756,27 @@ class InternetMonitor {
             console.log('⚠️ Нет токена для переподключения');
             this.isReconnecting = false;
         }
+    }
+
+    // Отправка статуса соединения на сервер
+    sendConnectionStatus(type, reason = '') {
+        if (!this.accessToken || !this.deviceId) {
+            console.log('⚠️ Нет данных для отправки статуса');
+            return;
+        }
+
+        const statusMessage = {
+            type: type,
+            deviceId: this.deviceId,
+            token: this.accessToken,
+            timestamp: Date.now(),
+            reason: reason,
+            userAgent: navigator.userAgent,
+            url: window.location.href
+        };
+
+        console.log('📡 Отправка статуса:', type, reason);
+        this.send(statusMessage);
     }
 
     // Установка PWA
