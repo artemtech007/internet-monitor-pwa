@@ -18,7 +18,7 @@ class InternetMonitor {
     }
 
     init() {
-        this.version = "Speed-Only v1.0"; // Версия для проверки обновления
+        this.version = "v6.0.0"; // Версия для проверки обновления
         this.setupUI();
         this.log(`🚀 App Version: ${this.version}`); // Лог версии при старте
         this.checkAccess();
@@ -91,13 +91,16 @@ class InternetMonitor {
         this.ws.onopen = () => {
             this.log('✅ WebSocket соединен');
             this.updateStatus('Онлайн (Жду команд)', 'online');
-            
+
             // Auth
             this.send({
                 type: 'auth',
                 token: this.accessToken,
                 deviceId: this.deviceId
             });
+
+            // Отправляем connection_restored после успешного подключения
+            this.sendConnectionStatus('connection_restored', 'websocket_connected');
         };
 
         this.ws.onmessage = async (event) => {
@@ -133,6 +136,14 @@ class InternetMonitor {
                 this.performSpeedTest(msg.fileSize);
                 break;
                 
+            case 'ping':
+                // Отвечаем на heartbeat
+                this.send({
+                    type: 'pong',
+                    timestamp: Date.now()
+                });
+                break;
+
             case 'error':
                 this.log(`❌ Ошибка от сервера: ${msg.message}`, 'error');
                 break;

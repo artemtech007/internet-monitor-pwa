@@ -13,10 +13,15 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 const WS_PORT = process.env.WS_PORT || 8081;
 
+// Версия программы
+const VERSION = "6.0.0";
+
 // Настройки
-const TEST_INTERVAL_MS = 30000; // 30 секунд между тестами
-const TEST_TIMEOUT_MS = 15000;  // 15 секунд на ожидание ответа
-const TEST_FILE_SIZE = 50000;   // 50KB для быстрого теста
+const TEST_INTERVAL_MS = 30000;     // 30 секунд между тестами
+const TEST_TIMEOUT_MS = 15000;      // 15 секунд на ожидание ответа
+const TEST_FILE_SIZE = 50000;       // 50KB для быстрого теста
+const HEARTBEAT_INTERVAL_MS = 20000; // 20 секунд между heartbeat
+const HEARTBEAT_TIMEOUT_MS = 10000;  // 10 секунд на ответ pong
 
 // Middleware
 app.use(helmet());
@@ -24,7 +29,7 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
 // Хранение подключенных устройств
-// deviceId -> { ws, info, lastSeen, waitingForTest, testStartTime }
+// deviceId -> { ws, info, lastSeen, waitingForTest, testStartTime, heartbeatSent, lastHeartbeat }
 const devices = new Map();
 
 // Валидные токены доступа
@@ -110,14 +115,34 @@ function handleMessage(ws, message) {
             }
 
             const actualDeviceId = deviceId || `device_${Date.now()}`;
-            console.log(`✅ Auth: ${actualDeviceId} (Token: ${token})`);
+            const isReconnection = devices.has(actualDeviceId);
 
-            // Регистрируем устройство
+            console.log(`✅ Auth: ${actualDeviceId} (Token: ${token}) ${isReconnection ? '[RECONNECT]' : '[NEW]'}`);
+
+            // Если это переподключение, отправляем connection_restored
+            if (isReconnection) {
+                const existingDevice = devices.get(actualDeviceId);
+                // Закрываем старое соединение
+                try { existingDevice.ws.close(); } catch (e) {}
+
+                // Отправляем событие восстановления соединения
+                forwardToN8n({
+                    type: 'connection_restored',
+                    deviceId: actualDeviceId,
+                    token: token,
+                    reason: 'reconnection',
+                    timestamp: Date.now()
+                });
+            }
+
+            // Регистрируем/обновляем устройство
             devices.set(actualDeviceId, {
                 ws,
                 info: { token, deviceId: actualDeviceId },
                 lastSeen: Date.now(),
-                waitingForTest: false
+                waitingForTest: false,
+                heartbeatSent: false,
+                lastHeartbeat: Date.now()
             });
 
             ws.send(JSON.stringify({
@@ -135,9 +160,9 @@ function handleMessage(ws, message) {
                 const device = devices.get(deviceId);
                 device.waitingForTest = false;
                 device.lastSeen = Date.now();
-                
+
                 console.log(`📊 Result from ${deviceId}: ${message.speedMbps} Mbps`);
-                
+
                 // Отправляем успешный результат в N8N
                 forwardToN8n({
                     type: 'speed_result',
@@ -147,6 +172,54 @@ function handleMessage(ws, message) {
                     success: true,
                     timestamp: Date.now()
                 });
+            }
+            break;
+
+        case 'connection_restored':
+            if (devices.has(deviceId)) {
+                const device = devices.get(deviceId);
+                device.lastSeen = Date.now();
+
+                console.log(`🔄 Connection restored from ${deviceId}`);
+
+                // Отправляем статус восстановления в N8N
+                forwardToN8n({
+                    type: 'connection_restored',
+                    deviceId,
+                    token: device.info.token,
+                    reason: message.reason || 'reconnection',
+                    timestamp: Date.now()
+                });
+            }
+            break;
+
+        case 'app_background':
+        case 'app_foreground':
+            if (devices.has(deviceId)) {
+                const device = devices.get(deviceId);
+                device.lastSeen = Date.now();
+
+                console.log(`📱 App ${type} from ${deviceId}`);
+
+                // Отправляем lifecycle событие в N8N
+                forwardToN8n({
+                    type: 'lifecycle',
+                    event: type,
+                    deviceId,
+                    token: device.info.token,
+                    timestamp: Date.now()
+                });
+            }
+            break;
+
+        case 'pong':
+            if (devices.has(deviceId)) {
+                const device = devices.get(deviceId);
+                device.lastSeen = Date.now();
+                device.heartbeatSent = false;
+                device.lastHeartbeat = Date.now();
+
+                console.log(`💓 Heartbeat pong from ${deviceId}`);
             }
             break;
 
@@ -216,6 +289,32 @@ setInterval(() => {
     }
 }, TEST_INTERVAL_MS);
 
+// Heartbeat цикл (ping-pong)
+setInterval(() => {
+    const now = Date.now();
+
+    for (const [deviceId, device] of devices.entries()) {
+        // Проверяем, не истекло ли время ожидания pong
+        if (device.heartbeatSent && (now - device.lastHeartbeat > HEARTBEAT_TIMEOUT_MS)) {
+            console.log(`💔 Heartbeat timeout для ${deviceId}`);
+            handleDeviceDisconnect(deviceId, device, 'heartbeat_timeout');
+            try { device.ws.terminate(); } catch (e) {}
+            continue;
+        }
+
+        // Отправляем ping, если прошло достаточно времени
+        if (!device.heartbeatSent && (now - device.lastHeartbeat > HEARTBEAT_INTERVAL_MS)) {
+            console.log(`💓 Отправка ping для ${deviceId}`);
+            device.heartbeatSent = true;
+
+            device.ws.send(JSON.stringify({
+                type: 'ping',
+                timestamp: Date.now()
+            }));
+        }
+    }
+}, 5000); // Проверяем каждые 5 секунд
+
 
 // --- Webhook ---
 
@@ -243,6 +342,7 @@ async function forwardToN8n(data) {
 // --- Start ---
 
 app.listen(PORT, () => {
+    console.log(`🚀 Internet Monitor Pro Server v${VERSION}`);
     console.log(`🌐 HTTP Server: port ${PORT}`);
     console.log(`🔌 WebSocket Server: port ${WS_PORT}`);
     console.log('🚀 Monitor started in Speed-Only mode');
