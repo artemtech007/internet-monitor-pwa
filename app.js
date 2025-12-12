@@ -18,6 +18,7 @@ class InternetMonitor {
         this.reconnectAttempts = 0;
         this.reconnectTimeout = null;
         this.pageVisible = !document.hidden;
+        this.lastHeartbeat = Date.now();
         this.settings = {
             serverUrl: 'wss://befiebubopal.beget.app/ws', // WebSocket сервер
             testFileSize: 200000, // 200KB - увеличен для более точных измерений
@@ -74,6 +75,23 @@ class InternetMonitor {
             }
         });
 
+        // Обработка сетевых событий браузера
+        window.addEventListener('online', () => {
+            console.log('🌐 Интернет соединение восстановлено');
+            this.sendConnectionStatus('connection_restored', 'network_online');
+            // Попытаться восстановить WebSocket
+            if (!this.isConnected && !this.isReconnecting) {
+                this.attemptReconnect();
+            }
+        });
+
+        window.addEventListener('offline', () => {
+            console.log('🌐 Интернет соединение потеряно');
+            this.isConnected = false;
+            this.updateStatus('❌ Нет интернета', 'offline');
+            this.sendConnectionStatus('connection_lost', 'network_offline');
+        });
+
         // Обработка beforeunload для корректного завершения
         window.addEventListener('beforeunload', () => {
             console.log('📱 Страница закрывается (beforeunload)');
@@ -83,8 +101,24 @@ class InternetMonitor {
 
         // Периодическая проверка соединения каждые 30 секунд
         setInterval(() => {
-            if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-                console.log(`🔄 Периодическая проверка: соединение потеряно (страница ${this.pageVisible ? 'видима' : 'свернута'})`);
+            const wasConnected = this.isConnected;
+            const isNowConnected = this.ws && this.ws.readyState === WebSocket.OPEN;
+            const timeSinceLastHeartbeat = Date.now() - this.lastHeartbeat;
+
+            // Дополнительная проверка по heartbeat (если прошло больше 60 секунд)
+            const heartbeatTimeout = timeSinceLastHeartbeat > 60000; // 60 секунд
+
+            if (wasConnected && (!isNowConnected || heartbeatTimeout)) {
+                // Соединение только что потеряно
+                console.log(`🔌 Обнаружена потеря соединения при периодической проверке (${heartbeatTimeout ? 'heartbeat timeout' : 'connection check'})`);
+                this.isConnected = false;
+                this.updateStatus('❌ Соединение потеряно', 'offline');
+                this.sendConnectionStatus('connection_lost', heartbeatTimeout ? 'heartbeat_timeout' : 'connection_check_failed');
+                this.log('🔌 Соединение потеряно (обнаружено проверкой)', 'error');
+            }
+
+            if (!isNowConnected || heartbeatTimeout) {
+                console.log(`🔄 Периодическая проверка: соединение все еще потеряно (страница ${this.pageVisible ? 'видима' : 'свернута'})`);
                 if (!this.isReconnecting) {
                     this.attemptReconnect();
                 }
@@ -258,14 +292,18 @@ class InternetMonitor {
             console.log('🌐 WebSocket instance created:', !!this.ws);
 
             this.ws.onopen = () => {
+                const wasDisconnected = !this.isConnected;
                 console.log('✅ WebSocket opened successfully');
                 this.isConnected = true;
                 this.isReconnecting = false;
                 this.reconnectAttempts = 0; // Сброс счетчика при успешном подключении
                 this.updateStatus('✅ Подключено', 'online');
                 this.log('🔌 WebSocket подключён', 'success');
-                // Отправляем статус восстановления соединения
-                this.sendConnectionStatus('connection_restored', 'websocket_reconnected');
+
+                // Отправляем статус восстановления соединения ТОЛЬКО если это восстановление
+                if (wasDisconnected) {
+                    this.sendConnectionStatus('connection_restored', 'websocket_reconnected');
+                }
 
                 // Очистить таймаут переподключения если он был
                 if (this.reconnectTimeout) {
@@ -285,6 +323,7 @@ class InternetMonitor {
             };
 
             this.ws.onmessage = (event) => {
+                this.lastHeartbeat = Date.now(); // Обновляем время последнего heartbeat
                 this.handleMessage(JSON.parse(event.data));
             };
 
@@ -309,6 +348,8 @@ class InternetMonitor {
             this.ws.onerror = (error) => {
                 console.log('❌ WebSocket error:', error);
                 this.log(`❌ WebSocket ошибка: ${error}`, 'error');
+                this.isConnected = false;
+                this.updateStatus('❌ Ошибка соединения', 'offline');
                 // Отправить статус ошибки соединения
                 this.sendConnectionStatus('connection_lost', 'websocket_error');
             };
