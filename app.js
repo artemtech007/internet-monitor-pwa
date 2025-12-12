@@ -300,10 +300,7 @@ class InternetMonitor {
                 this.updateStatus('✅ Подключено', 'online');
                 this.log('🔌 WebSocket подключён', 'success');
 
-                // Отправляем статус восстановления соединения ТОЛЬКО если это восстановление
-                if (wasDisconnected) {
-                    this.sendConnectionStatus('connection_restored', 'websocket_reconnected');
-                }
+                // connection_restored будет отправлен в welcome сообщении
 
                 // Очистить таймаут переподключения если он был
                 if (this.reconnectTimeout) {
@@ -385,6 +382,14 @@ class InternetMonitor {
         this.log(`📨 Получено: ${data.type}`, 'info');
 
         switch (data.type) {
+            case 'welcome':
+                console.log(`👋 Welcome received: ${data.message}, device: ${data.deviceId}, reconnect: ${data.isReconnect}`);
+                if (!data.isReconnect) {
+                    // Первичное подключение - отправляем connection_restored
+                    this.sendConnectionStatus('connection_restored', 'initial_connection');
+                }
+                // Для переподключения connection_restored уже отправлен в onopen
+                break;
             case 'speed_test_request':
                 this.performSpeedTest(data.fileSize || this.settings.testFileSize);
                 break;
