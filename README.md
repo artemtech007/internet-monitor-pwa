@@ -16,17 +16,17 @@
 │ • PWA install   │    │ • Heartbeat     │    │                 │
 │ • Background    │    │ • Auto tests    │    └─────────────────┘
 └─────────────────┘    └─────────────────┘
-                              │
-                              ▼
-                       ┌─────────────────┐
-                       │   Production    │
-                       │   VPS Server    │
-                       │ • Ubuntu 22.04  │
-                       │ • Node.js 22.x  │
-                       │ • PM2 process   │
-                       │ • Nginx proxy   │
-                       │ • SSL certs     │
-                       └─────────────────┘
+                             │
+                             ▼
+                      ┌─────────────────┐
+                      │   Production    │
+                      │   VPS Server    │
+                      │ • Ubuntu 22.04  │
+                      │ • Node.js 22.x  │
+                      │ • PM2 process   │
+                      │ • Nginx proxy   │
+                      │ • SSL certs     │
+                      └─────────────────┘
 ```
 
 **Heartbeat механизм (ping-pong):**
@@ -130,6 +130,35 @@ ssh root@155.212.220.59 'pm2 logs internet-monitor-ws --lines 10'
 # Проверка портов
 ssh root@155.212.220.59 'netstat -tlnp | grep :808'
 ```
+
+## 🚀 Быстрый старт
+
+### Установка PWA
+```bash
+# Клонирование репозитория
+git clone https://github.com/artemtech007/internet-monitor-pwa.git
+cd internet-monitor-pwa
+
+# Установка зависимостей
+npm install
+
+# Запуск в режиме разработки
+npm run dev
+
+# Сборка для продакшена
+npm run build
+```
+
+### Настройка сервера
+```bash
+# Клонирование репозитория сервера
+git clone https://github.com/artemtech007/internet-monitor-server.git
+cd internet-monitor-server
+
+# Установка зависимостей
+npm install
+
+# Запуск сервера
 npm start
 # Или для разработки: npm run dev
 ```
@@ -163,20 +192,6 @@ const VALID_TOKENS = [
   }
   ```
 - `speed_result` - Результаты теста скорости
-- `pong` - Ответ на heartbeat ping
-  ```json
-  {
-    "type": "speed_result",
-    "speedMbps": 15.7,
-    "bytesSent": 50000,
-    "bytesReceived": 50000,
-    "duration": 2450,
-    "success": true,
-    "timestamp": 1765487007,
-    "deviceId": "device_123",
-    "token": "PHONE001"
-  }
-  ```
 
 #### Сообщения от сервера к клиенту:
 - `auth_success` - Успешная аутентификация
@@ -213,35 +228,6 @@ const VALID_TOKENS = [
 **Формат данных (GET параметры):**
 ```
 type=speed_result&speedMbps=15.7&bytesSent=50000&bytesReceived=50000&duration=2450&success=true&timestamp=1765487007&deviceId=device_123&token=PHONE001
-```
-
-**Heartbeat механизм (ping-pong):**
-- Сервер отправляет `ping` каждые 20 секунд
-- Устройство отвечает `pong` в течение 10 секунд
-- При отсутствии ответа → `connection_lost`
-- При переподключении → `connection_restored`
-
-**Пример обработки в N8N:**
-```javascript
-// В Function Node
-const query = $node["Webhook"].query;
-
-return {
-  speed: parseFloat(query.speedMbps),
-  device: query.deviceId,
-  timestamp: new Date(parseInt(query.timestamp) * 1000),
-  success: query.success === 'true'
-};
-```
-    deviceId: 'device_123',
-    token: 'PHONE001'
-}));
-
-// Получение команд от сервера
-ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    // Обработка команд
-};
 ```
 
 ## 🔐 Аутентификация
@@ -424,10 +410,6 @@ ssh root@155.212.220.59 'grep N8N_WEBHOOK_URL ~/internet-monitor-websocket/serve
 
 # Ручной тест
 curl -X GET "https://botstroikom.store/webhook/ph1?test=manual&speed=12.5"
-```
-curl -X POST http://localhost:8080/api/broadcast \
-  -H "Content-Type: application/json" \
-  -d '{"type": "ping_test_request"}'
 ```
 
 ## 🔧 Конфигурация
