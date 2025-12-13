@@ -18,12 +18,8 @@ const VERSION = "6.0.0";
 
 // Настройки
 const TEST_INTERVAL_MS = 20000; // 20 секунд между тестами
-const TEST_TIMEOUT_MS = 15000;  // 15 секунд на ожидание ответа
-const TEST_FILE_SIZE = 50000;   // 50KB для быстрого теста
-
-// Heartbeat настройки
-const HEARTBEAT_INTERVAL_MS = 60000; // 60 секунд между ping
-const HEARTBEAT_TIMEOUT_MS = 10000;  // 10 секунд на ожидание pong
+const TEST_TIMEOUT_MS = 10000;  // 10 секунд на ожидание ответа
+const TEST_FILE_SIZE = 200000;  // 200KB для точного измерения скорости
 
 // Middleware
 app.use(helmet());
@@ -31,7 +27,7 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
 // Хранение подключенных устройств
-// deviceId -> { ws, info, lastSeen, waitingForTest, testStartTime }
+// deviceId -> { ws, info, lastSeen, waitingForTest, testStartTime, timeoutId }
 const devices = new Map();
 
 // Валидные токены доступа
@@ -161,9 +157,15 @@ function handleMessage(ws, message) {
                 device.waitingForTest = false;
                 device.lastSeen = Date.now();
 
+                // Отменяем таймер гарантированной отправки
+                if (device.timeoutId) {
+                    clearTimeout(device.timeoutId);
+                    device.timeoutId = null;
+                }
+
                 console.log(`📊 Result from ${deviceId}: ${message.speedMbps} Mbps`);
 
-                // Отправляем успешный результат в N8N
+                // Отправляем результат в N8N
                 forwardToN8n({
                     type: 'speed_result',
                     deviceId,
@@ -223,15 +225,6 @@ function handleMessage(ws, message) {
             }
             break;
 
-        case 'pong':
-            if (devices.has(deviceId)) {
-                const device = devices.get(deviceId);
-                device.lastSeen = Date.now();
-                device.heartbeatSent = false; // Сбрасываем флаг heartbeat
-
-                console.log(`💓 Pong received from ${deviceId}`);
-            }
-            break;
 
         default:
             console.log(`⚠️ Неизвестное сообщение от ${deviceId}: ${type}`);
@@ -245,10 +238,27 @@ function sendSpeedTestRequest(deviceId) {
     if (!device || device.ws.readyState !== WebSocket.OPEN) return;
 
     console.log(`📡 Запрос теста для ${deviceId}`);
-    
+
     device.waitingForTest = true;
     device.testStartTime = Date.now();
-    
+
+    // Гарантированная отправка результата через 10 секунд (если ответ не пришел)
+    device.timeoutId = setTimeout(() => {
+        if (device.waitingForTest) {
+            console.log(`⏰ Таймаут теста для ${deviceId} - отправляем speedMbps=0`);
+            device.waitingForTest = false;
+
+            forwardToN8n({
+                type: 'speed_result',
+                deviceId: deviceId,
+                token: device.info.token,
+                speedMbps: 0, // Индикатор отсутствия ответа
+                success: false,
+                timestamp: Date.now()
+            });
+        }
+    }, TEST_TIMEOUT_MS);
+
     device.ws.send(JSON.stringify({
         type: 'speed_test_request',
         fileSize: TEST_FILE_SIZE
@@ -256,6 +266,12 @@ function sendSpeedTestRequest(deviceId) {
 }
 
 function handleDeviceDisconnect(deviceId, device, reason) {
+    // Очищаем таймер если он был
+    if (device.timeoutId) {
+        clearTimeout(device.timeoutId);
+        device.timeoutId = null;
+    }
+
     // Отправляем алерт в N8N
     forwardToN8n({
         type: 'connection_lost',
@@ -299,31 +315,6 @@ setInterval(() => {
     }
 }, TEST_INTERVAL_MS);
 
-// --- Webhook ---
-setInterval(() => {
-    const now = Date.now();
-
-    for (const [deviceId, device] of devices.entries()) {
-        // Проверяем, не истекло ли время ожидания pong
-        if (device.heartbeatSent && (now - device.lastHeartbeat > HEARTBEAT_TIMEOUT_MS)) {
-            console.log(`💔 Heartbeat timeout для ${deviceId}`);
-            handleDeviceDisconnect(deviceId, device, 'heartbeat_timeout');
-            try { device.ws.terminate(); } catch (e) {}
-            continue;
-        }
-
-        // Отправляем ping, если прошло достаточно времени
-        if (!device.heartbeatSent && (now - device.lastHeartbeat > HEARTBEAT_INTERVAL_MS)) {
-            console.log(`💓 Отправка ping для ${deviceId}`);
-            device.heartbeatSent = true;
-
-            device.ws.send(JSON.stringify({
-                type: 'ping',
-                timestamp: Date.now()
-            }));
-        }
-    }
-}, 5000); // Проверяем каждые 5 секунд
 
 
 // --- Webhook ---

@@ -405,15 +405,6 @@ class InternetMonitor {
                 this.performSpeedTest(data.fileSize || this.settings.testFileSize);
                 break;
 
-            case 'ping':
-                // Отвечаем на heartbeat ping
-                this.send({
-                    type: 'pong',
-                    timestamp: Date.now()
-                });
-                console.log('💓 Pong sent');
-                break;
-
             case 'settings_update':
                 this.settings = { ...this.settings, ...data.settings };
                 this.log('✅ Настройки обновлены', 'success');
