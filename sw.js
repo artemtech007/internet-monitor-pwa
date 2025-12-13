@@ -8,10 +8,11 @@ const STATIC_CACHE = 'internet-monitor-static-v1';
 
 // Файлы для кэширования
 const STATIC_FILES = [
-    '/',
-    '/index.html',
-    '/app.js',
-    '/manifest.json'
+    '/internet-monitor-pwa/',
+    '/internet-monitor-pwa/index.html',
+    '/internet-monitor-pwa/app.js',
+    '/internet-monitor-pwa/manifest.json',
+    '/internet-monitor-pwa/sw.js'
 ];
 
 // Установка Service Worker

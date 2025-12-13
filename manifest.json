@@ -9,7 +9,7 @@
   "orientation": "portrait",
   "categories": ["utilities", "productivity"],
   "lang": "ru",
-  "scope": "/",
+  "scope": "/internet-monitor-pwa/",
   "id": "internet-monitor-pwa",
   "launch_handler": {
     "client_mode": "focus-existing"
@@ -33,7 +33,7 @@
       "name": "Тест скорости",
       "short_name": "Тест",
       "description": "Быстрый тест скорости интернета",
-      "url": "/?action=test",
+      "url": "/internet-monitor-pwa/?action=test",
       "icons": [
         {
           "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%23f59e0b'/><text x='50' y='65' text-anchor='middle' fill='white' font-size='60'>⚡</text></svg>",

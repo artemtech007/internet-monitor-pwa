@@ -17,11 +17,13 @@ const WS_PORT = process.env.WS_PORT || 8081;
 const VERSION = "6.0.0";
 
 // Настройки
-const TEST_INTERVAL_MS = 30000;     // 30 секунд между тестами
-const TEST_TIMEOUT_MS = 15000;      // 15 секунд на ожидание ответа
-const TEST_FILE_SIZE = 50000;       // 50KB для быстрого теста
-const HEARTBEAT_INTERVAL_MS = 20000; // 20 секунд между heartbeat
-const HEARTBEAT_TIMEOUT_MS = 10000;  // 10 секунд на ответ pong
+const TEST_INTERVAL_MS = 20000; // 20 секунд между тестами
+const TEST_TIMEOUT_MS = 15000;  // 15 секунд на ожидание ответа
+const TEST_FILE_SIZE = 50000;   // 50KB для быстрого теста
+
+// Heartbeat настройки
+const HEARTBEAT_INTERVAL_MS = 60000; // 60 секунд между ping
+const HEARTBEAT_TIMEOUT_MS = 10000;  // 10 секунд на ожидание pong
 
 // Middleware
 app.use(helmet());
@@ -29,7 +31,7 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
 // Хранение подключенных устройств
-// deviceId -> { ws, info, lastSeen, waitingForTest, testStartTime, heartbeatSent, lastHeartbeat }
+// deviceId -> { ws, info, lastSeen, waitingForTest, testStartTime }
 const devices = new Map();
 
 // Валидные токены доступа
@@ -140,9 +142,7 @@ function handleMessage(ws, message) {
                 ws,
                 info: { token, deviceId: actualDeviceId },
                 lastSeen: Date.now(),
-                waitingForTest: false,
-                heartbeatSent: false,
-                lastHeartbeat: Date.now()
+                waitingForTest: false
             });
 
             ws.send(JSON.stringify({
@@ -193,6 +193,17 @@ function handleMessage(ws, message) {
             }
             break;
 
+        case 'device_info':
+            if (devices.has(deviceId)) {
+                const device = devices.get(deviceId);
+                device.lastSeen = Date.now();
+                // Обновляем информацию об устройстве
+                device.info = { ...device.info, ...message };
+
+                console.log(`📱 Device info from ${deviceId}:`, message);
+            }
+            break;
+
         case 'app_background':
         case 'app_foreground':
             if (devices.has(deviceId)) {
@@ -216,10 +227,9 @@ function handleMessage(ws, message) {
             if (devices.has(deviceId)) {
                 const device = devices.get(deviceId);
                 device.lastSeen = Date.now();
-                device.heartbeatSent = false;
-                device.lastHeartbeat = Date.now();
+                device.heartbeatSent = false; // Сбрасываем флаг heartbeat
 
-                console.log(`💓 Heartbeat pong from ${deviceId}`);
+                console.log(`💓 Pong received from ${deviceId}`);
             }
             break;
 
@@ -289,7 +299,7 @@ setInterval(() => {
     }
 }, TEST_INTERVAL_MS);
 
-// Heartbeat цикл (ping-pong)
+// --- Webhook ---
 setInterval(() => {
     const now = Date.now();
 

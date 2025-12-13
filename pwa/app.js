@@ -8,17 +8,24 @@ class InternetMonitor {
         this.ws = null;
         this.deviceId = this.generateDeviceId();
         this.accessToken = localStorage.getItem('accessToken');
-        
+        this.isConnected = false;
+        this.isReconnecting = false;
+        this.reconnectAttempts = 0;
+        this.reconnectTimeout = null;
+
         this.settings = {
             serverUrl: 'wss://befiebubopal.beget.app/ws',
-            reconnectInterval: 5000 
+            testFileSize: 200000, // 200KB - увеличен для более точных измерений
+            reconnectInterval: 5000,
+            maxReconnectAttempts: 20, // Увеличено до 20 попыток
+            reconnectDelay: 30000 // Начальная задержка 30 секунд
         };
 
         this.init();
     }
 
     init() {
-        this.version = "v6.0.0"; // Версия для проверки обновления
+        this.version = "v6.1.0"; // Версия для проверки обновления - 200KB тест
         this.setupUI();
         this.log(`🚀 App Version: ${this.version}`); // Лог версии при старте
         this.checkAccess();
@@ -81,27 +88,50 @@ class InternetMonitor {
     }
 
     connect() {
-        if (this.ws) return; // Уже подключаемся или подключены
+        console.log('🔌 Attempting to connect to:', this.settings.serverUrl);
+        console.log('🔑 Access token available:', !!this.accessToken);
 
-        this.log('🔌 Подключение к серверу...');
-        this.updateStatus('Подключение...', 'testing');
+        if (this.isConnected) {
+            console.log('⚠️ Already connected, skipping');
+            return;
+        }
 
-        this.ws = new WebSocket(this.settings.serverUrl);
+        try {
+            this.updateStatus('Подключение...', 'testing');
+            this.ws = new WebSocket(this.settings.serverUrl);
+            console.log('🌐 WebSocket instance created:', !!this.ws);
 
-        this.ws.onopen = () => {
-            this.log('✅ WebSocket соединен');
-            this.updateStatus('Онлайн (Жду команд)', 'online');
+            this.ws.onopen = () => {
+                const wasDisconnected = !this.isConnected;
+                console.log('✅ WebSocket opened successfully');
+                this.isConnected = true;
+                this.isReconnecting = false;
+                this.reconnectAttempts = 0; // Сброс счетчика при успешном подключении
+                this.updateStatus('✅ Подключено', 'online');
+                this.log('🔌 WebSocket подключён', 'success');
 
-            // Auth
-            this.send({
-                type: 'auth',
-                token: this.accessToken,
-                deviceId: this.deviceId
-            });
+                // Очистить таймаут переподключения если он был
+                if (this.reconnectTimeout) {
+                    clearTimeout(this.reconnectTimeout);
+                    this.reconnectTimeout = null;
+                }
 
-            // Отправляем connection_restored после успешного подключения
-            this.sendConnectionStatus('connection_restored', 'websocket_connected');
-        };
+                // Отправка информации об устройстве
+                this.send({
+                    type: 'device_info',
+                    deviceId: this.deviceId,
+                    token: this.accessToken,
+                    userAgent: navigator.userAgent,
+                    timestamp: Date.now()
+                });
+
+                // Auth
+                this.send({
+                    type: 'auth',
+                    token: this.accessToken,
+                    deviceId: this.deviceId
+                });
+            };
 
         this.ws.onmessage = async (event) => {
             try {
@@ -112,76 +142,119 @@ class InternetMonitor {
             }
         };
 
-        this.ws.onclose = (e) => {
-            this.log('🔌 Соединение разорвано. Реконнект через 5 сек...');
-            this.updateStatus('Офлайн', 'offline');
-            this.ws = null;
-            setTimeout(() => this.connect(), this.settings.reconnectInterval);
-        };
+            this.ws.onclose = (event) => {
+                console.log('🔌 WebSocket closed:', event.code, event.reason);
+                this.isConnected = false;
+                this.ws = null;
 
-        this.ws.onerror = (e) => {
-            console.error('WS Error', e);
-            // onclose сработает следом
-        };
+                this.updateStatus('Офлайн', 'offline');
+                this.log('🔌 Соединение разорвано', 'error');
+
+                // Запускаем переподключение только если не в процессе переподключения
+                if (!this.isReconnecting) {
+                    this.scheduleReconnect();
+                }
+            };
+
+            this.ws.onerror = (e) => {
+                console.error('WS Error', e);
+                // onclose сработает следом
+            };
     }
 
-    handleMessage(msg) {
-        switch (msg.type) {
+    handleMessage(data) {
+        this.log(`📨 Получено: ${data.type}`, 'info');
+
+        switch (data.type) {
             case 'welcome':
-                this.log(`👋 Сервер: ${msg.message}`);
+                console.log(`👋 Welcome received: ${data.message}, device: ${data.deviceId}, reconnect: ${data.isReconnect}`);
+                if (data.isReconnect) {
+                    // Это переподключение - отправляем connection_restored
+                    this.sendConnectionStatus('connection_restored', 'reconnection_successful');
+                } else {
+                    // Первичное подключение - ничего не отправляем, connection_restored придет от сервера
+                    console.log('✅ Первичное подключение установлено');
+                }
                 break;
-            
+
             case 'speed_test_request':
-                this.log('🚀 Запрос теста скорости от сервера');
-                this.performSpeedTest(msg.fileSize);
+                this.performSpeedTest(data.fileSize || this.settings.testFileSize);
                 break;
-                
-            case 'ping':
-                // Отвечаем на heartbeat
-                this.send({
-                    type: 'pong',
-                    timestamp: Date.now()
-                });
+
+            case 'settings_update':
+                this.settings = { ...this.settings, ...data.settings };
+                this.log('✅ Настройки обновлены', 'success');
+                break;
+
+            case 'disconnect':
+                this.disconnect();
                 break;
 
             case 'error':
-                this.log(`❌ Ошибка от сервера: ${msg.message}`, 'error');
+                this.log(`❌ Ошибка от сервера: ${data.message}`, 'error');
                 break;
+
+            default:
+                this.log(`⚠️ Неизвестный тип сообщения: ${data.type}`, 'info');
         }
     }
 
-    async performSpeedTest(fileSize = 50000) {
-        this.updateStatus('⚡ Измерение скорости...', 'testing');
-        
+    async performSpeedTest(fileSize = this.settings.testFileSize) {
+        console.log('🔍 Starting speed test...');
+
+        // Предотвращаем одновременные тесты
+        if (this.isTesting) {
+            console.log('⚠️ Test already in progress, skipping');
+            return;
+        }
+        this.isTesting = true;
+
+        this.updateStatus('⚡ Тест скорости...', 'testing');
+
         try {
+            // Создание тестовых данных в памяти (не файл!)
+            const testData = new Uint8Array(fileSize);
+            for (let i = 0; i < fileSize; i++) {
+                testData[i] = Math.random() * 256;
+            }
+
             const startTime = performance.now();
-            
-            // Генерируем "мусор" для url, чтобы обойти кэш
-            const random = Math.random();
-            const response = await fetch(`https://befiebubopal.beget.app/speed-test?r=${random}`, {
+
+            // Отправка на сервер с случайным параметром для предотвращения кэширования
+            const randomParam = Math.random().toString(36).substring(2);
+            const response = await fetch(`https://befiebubopal.beget.app/speed-test?_=${randomParam}`, {
                 method: 'POST',
-                body: new Uint8Array(fileSize), // Отправляем пустые байты
+                body: testData,
                 headers: {
                     'Content-Type': 'application/octet-stream',
                     'X-Device-ID': this.deviceId,
-                    'X-Access-Token': this.accessToken
+                    'X-Access-Token': this.accessToken,
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
                 }
             });
 
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
 
-            // Читаем ответ (Stream)
+            // Чтение ответа как поток (экономит память)
             const reader = response.body.getReader();
-            let received = 0;
+            let bytesReceived = 0;
+            const chunks = [];
+
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
-                received += value.length;
+                bytesReceived += value.length;
+                chunks.push(value);
             }
 
             const duration = performance.now() - startTime;
-            const speedMbps = (received * 8) / (duration / 1000) / 1_000_000;
-            
+            const speedMbps = (bytesReceived * 8) / (duration / 1000) / 1_000_000;
+
+            console.log(`✅ Speed test completed: ${speedMbps.toFixed(2)} Mbps, ${bytesReceived} bytes in ${duration.toFixed(0)}ms`);
+
             this.log(`✅ Скорость: ${speedMbps.toFixed(2)} Mbps`);
             if (this.ui.speed) this.ui.speed.textContent = `${speedMbps.toFixed(1)} Mbps`;
 
@@ -190,16 +263,17 @@ class InternetMonitor {
                 type: 'speed_result',
                 speedMbps: speedMbps,
                 duration: duration,
-                bytes: received
+                bytes: bytesReceived
             });
-            
+
             this.updateStatus('Онлайн (Жду команд)', 'online');
 
         } catch (error) {
+            console.error('❌ Speed test error:', error);
             this.log(`❌ Ошибка теста: ${error.message}`, 'error');
             this.updateStatus('Ошибка теста', 'offline');
-            // При ошибке теста можно ничего не слать - сервер сам отвалится по таймауту
-            // Или можно послать speed: 0, но лучше пусть сработает таймаут сервера (надежнее)
+        } finally {
+            this.isTesting = false;
         }
     }
 
@@ -240,9 +314,52 @@ class InternetMonitor {
             }
         }
     }
+
+    sendConnectionStatus(type, reason) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+                type: type,
+                deviceId: this.deviceId,
+                token: this.accessToken,
+                reason: reason,
+                timestamp: Date.now()
+            }));
+        }
+    }
+
+    scheduleReconnect() {
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+        }
+
+        if (this.reconnectAttempts >= this.settings.maxReconnectAttempts) {
+            console.log('❌ Maximum reconnection attempts reached, giving up');
+            this.log('❌ Превышено максимальное количество попыток переподключения', 'error');
+            this.updateStatus('Не удалось подключиться', 'offline');
+            return;
+        }
+
+        this.isReconnecting = true;
+        this.reconnectAttempts++;
+
+        const delay = this.settings.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1); // Экспоненциальная задержка
+        console.log(`🔄 Scheduling reconnect attempt ${this.reconnectAttempts}/${this.settings.maxReconnectAttempts} in ${delay}ms`);
+
+        this.reconnectTimeout = setTimeout(() => {
+            this.attemptReconnect();
+        }, delay);
+    }
+
+    attemptReconnect() {
+        console.log(`🔄 Attempting to reconnect (${this.reconnectAttempts}/${this.settings.maxReconnectAttempts})`);
+        this.log(`🔄 Попытка переподключения ${this.reconnectAttempts}/${this.settings.maxReconnectAttempts}`, 'info');
+        this.connect();
+    }
 }
 
 // Start
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new InternetMonitor();
 });
+
+
