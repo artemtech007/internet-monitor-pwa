@@ -5,7 +5,7 @@
 
 class InternetMonitor {
     constructor() {
-        this.VERSION = "7.0.0"; // Версия клиентского ПО
+        this.VERSION = "7.0.1"; // Версия клиентского ПО
         this.ws = null;
         this.deviceId = this.generateDeviceId();
         this.isConnected = false;
