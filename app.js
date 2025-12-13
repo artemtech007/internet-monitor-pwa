@@ -5,6 +5,7 @@
 
 class InternetMonitor {
     constructor() {
+        this.VERSION = "7.0.0"; // Версия клиентского ПО
         this.ws = null;
         this.deviceId = this.generateDeviceId();
         this.isConnected = false;
@@ -250,6 +251,7 @@ class InternetMonitor {
         if (savedToken && validTokens.includes(savedToken)) {
             this.accessToken = savedToken;
             this.log('✅ Доступ подтверждён', 'success');
+            this.log(`📱 Internet Monitor PWA v${this.VERSION}`, 'info');
             return;
         }
 
@@ -264,6 +266,7 @@ class InternetMonitor {
         this.accessToken = token;
         localStorage.setItem('accessToken', token);
         this.log('✅ Доступ подтверждён', 'success');
+        this.log(`📱 Internet Monitor PWA v${this.VERSION}`, 'info');
     }
 
     generateDeviceId() {
