@@ -5,7 +5,7 @@
 
 class InternetMonitor {
     constructor() {
-        this.VERSION = "7.0.2"; // Версия клиентского ПО
+        this.VERSION = "7.0.3"; // Версия клиентского ПО
         this.ws = null;
         this.deviceId = this.generateDeviceId();
         this.isConnected = false;
@@ -365,24 +365,31 @@ class InternetMonitor {
     }
 
     disconnect() {
-        // Отправить статус отключения перед закрытием
-        this.sendConnectionStatus('connection_lost', 'manual_disconnect');
+        // Отправить специальное сообщение о полном отключении от мониторинга
+        this.send({
+            type: 'device_disconnect',
+            reason: 'manual_disconnect',
+            timestamp: Date.now()
+        });
 
-        // Очистить таймауты переподключения
-        if (this.reconnectTimeout) {
-            clearTimeout(this.reconnectTimeout);
-            this.reconnectTimeout = null;
-        }
+        // Небольшая задержка чтобы сообщение успело отправиться
+        setTimeout(() => {
+            // Очистить таймауты переподключения
+            if (this.reconnectTimeout) {
+                clearTimeout(this.reconnectTimeout);
+                this.reconnectTimeout = null;
+            }
 
-        if (this.ws) {
-            this.ws.close(1000, 'Manual disconnect');
-            this.ws = null;
-        }
-        this.isConnected = false;
-        this.isReconnecting = false;
-        this.reconnectAttempts = 0;
-        this.updateStatus('Отключено', 'offline');
-        this.log('🔌 Отключено вручную', 'info');
+            if (this.ws) {
+                this.ws.close(1000, 'Manual disconnect');
+                this.ws = null;
+            }
+            this.isConnected = false;
+            this.isReconnecting = false;
+            this.reconnectAttempts = 0;
+            this.updateStatus('Отключено от мониторинга', 'offline');
+            this.log('🔌 Полностью отключено от мониторинга', 'info');
+        }, 100);
     }
 
     handleMessage(data) {
