@@ -101,26 +101,21 @@ class InternetMonitor {
             this.handlePageUnload();
         });
 
-        // Периодическая проверка соединения каждые 30 секунд
+        // Периодическая проверка соединения каждые 30 секунд (упрощенная)
         setInterval(() => {
             const wasConnected = this.isConnected;
             const isNowConnected = this.ws && this.ws.readyState === WebSocket.OPEN;
-            const timeSinceLastHeartbeat = Date.now() - this.lastHeartbeat;
 
-            // Дополнительная проверка по heartbeat (если прошло больше 60 секунд)
-            const heartbeatTimeout = timeSinceLastHeartbeat > 60000; // 60 секунд
-
-            if (wasConnected && (!isNowConnected || heartbeatTimeout)) {
+            if (wasConnected && !isNowConnected) {
                 // Соединение только что потеряно
-                console.log(`🔌 Обнаружена потеря соединения при периодической проверке (${heartbeatTimeout ? 'heartbeat timeout' : 'connection check'})`);
+                console.log('🔌 Обнаружена потеря соединения при периодической проверке');
                 this.isConnected = false;
                 this.updateStatus('❌ Соединение потеряно', 'offline');
-                // Отправляем connection_lost через HTTP с дополнительными попытками
-                this.forceSendConnectionLost(heartbeatTimeout ? 'heartbeat_timeout' : 'connection_check_failed');
+                this.forceSendConnectionLost('connection_check_failed');
                 this.log('🔌 Соединение потеряно (обнаружено проверкой)', 'error');
             }
 
-            if (!isNowConnected || heartbeatTimeout) {
+            if (!isNowConnected) {
                 console.log(`🔄 Периодическая проверка: соединение все еще потеряно (страница ${this.pageVisible ? 'видима' : 'свернута'})`);
                 if (!this.isReconnecting) {
                     this.attemptReconnect();
